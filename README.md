@@ -24,7 +24,7 @@
 
 <p align="center">
   <a href="https://www.beeper.com/changelog/desktop">
-    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/robertogogoni/update-beeper/master/.github/badges/beeper-version.json&style=for-the-badge" alt="Beeper Latest">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/beeper-community/update-beeper/master/.github/badges/beeper-version.json&style=for-the-badge" alt="Beeper Latest">
   </a>
   &nbsp;&nbsp;
   <a href="https://aur.archlinux.org/packages/beeper-v4-bin">
@@ -37,8 +37,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/robertogogoni/update-beeper/actions/workflows/lint.yml">
-    <img src="https://github.com/robertogogoni/update-beeper/actions/workflows/lint.yml/badge.svg" alt="Lint">
+  <a href="https://github.com/beeper-community/update-beeper/actions/workflows/lint.yml">
+    <img src="https://github.com/beeper-community/update-beeper/actions/workflows/lint.yml/badge.svg" alt="Lint">
   </a>
   <a href="https://opensource.org/licenses/MIT">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
@@ -158,7 +158,7 @@ Beeper crashed on startup. No warning during install. No automatic recovery. Thi
 ### Quick Install (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/robertogogoni/update-beeper/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/beeper-community/update-beeper/master/install.sh | bash
 ```
 
 ### Manual Install
@@ -166,9 +166,9 @@ curl -fsSL https://raw.githubusercontent.com/robertogogoni/update-beeper/main/in
 ```bash
 # Download scripts
 curl -o ~/.local/bin/update-beeper \
-  https://raw.githubusercontent.com/robertogogoni/update-beeper/main/update-beeper
+  https://raw.githubusercontent.com/beeper-community/update-beeper/master/update-beeper
 curl -o ~/.local/bin/beeper-version \
-  https://raw.githubusercontent.com/robertogogoni/update-beeper/main/beeper-version
+  https://raw.githubusercontent.com/beeper-community/update-beeper/master/beeper-version
 
 # Make executable
 chmod +x ~/.local/bin/update-beeper ~/.local/bin/beeper-version
@@ -177,7 +177,7 @@ chmod +x ~/.local/bin/update-beeper ~/.local/bin/beeper-version
 ### Clone & Install
 
 ```bash
-git clone https://github.com/robertogogoni/update-beeper.git
+git clone https://github.com/beeper-community/update-beeper.git
 cd update-beeper
 ./install.sh
 ```
@@ -239,9 +239,9 @@ Set up automatic daily update checks with desktop notifications:
 ```bash
 # Copy systemd user files
 mkdir -p ~/.config/systemd/user
-curl -fsSL https://raw.githubusercontent.com/robertogogoni/update-beeper/main/systemd/update-beeper-user.service \
+curl -fsSL https://raw.githubusercontent.com/beeper-community/update-beeper/master/systemd/update-beeper-user.service \
   -o ~/.config/systemd/user/update-beeper.service
-curl -fsSL https://raw.githubusercontent.com/robertogogoni/update-beeper/main/systemd/update-beeper-user.timer \
+curl -fsSL https://raw.githubusercontent.com/beeper-community/update-beeper/master/systemd/update-beeper-user.timer \
   -o ~/.config/systemd/user/update-beeper.timer
 
 # Enable the timer
@@ -298,7 +298,7 @@ Then use: `bu`, `bv`, `beeper update`, `beeper version`
 ```bash
 # Install the NL wrapper
 curl -o ~/bin/jarvis-beeper \
-  https://raw.githubusercontent.com/robertogogoni/update-beeper/main/jarvis-beeper
+  https://raw.githubusercontent.com/beeper-community/update-beeper/master/jarvis-beeper
 chmod +x ~/bin/jarvis-beeper
 
 # Use natural language!
@@ -345,7 +345,7 @@ The update-beeper skill auto-activates when you say things like:
 ```bash
 # Download the health check script
 curl -o ~/bin/beeper-health \
-  https://raw.githubusercontent.com/robertogogoni/update-beeper/main/beeper-health
+  https://raw.githubusercontent.com/beeper-community/update-beeper/master/beeper-health
 chmod +x ~/bin/beeper-health
 
 # Install systemd timer (runs every 5 minutes)
@@ -433,7 +433,7 @@ The desktop file override is the reliable solution.
 │   │  • Clear extraction, retry                                   │      │
 │   │  • Fix permissions recursively                               │      │
 │   │  • Clear Electron cache                                      │      │
-│   └──────────────────────────────────┬───────────────────────────┘      │
+│   └──────────────────────────────────────────────────────────────┘      │
 │                                      │                                   │
 │                                      │ ALL RETRIES EXHAUSTED             │
 │                                      ▼                                   │
