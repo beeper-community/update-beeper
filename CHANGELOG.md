@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-02-02
+
+### Added
+
+- **Domain Validation** - Protects against MITM attacks
+  - Verifies download URLs come from trusted Beeper domains only
+  - Trusted domains: `beeper.com`, `todesktop.com`, `github.com`
+  - Exits with clear security warning if untrusted domain detected
+
+- **HTTP Status Validation** - Properly handles API errors
+  - Validates HTTP response codes from Beeper API, AUR, and downloads
+  - Fails on 4xx/5xx errors instead of silently continuing
+  - Reports specific HTTP status code in error messages
+
+- **SHA256 Checksum Verification** - Ensures download integrity
+  - Trust-on-first-run model: Records checksum on first download of each version
+  - Subsequent downloads are verified against stored checksum
+  - Detects corrupted or tampered downloads
+  - Checksum cache: `~/.cache/update-beeper/checksums.txt`
+  - New `--skip-checksum` flag to bypass verification for forced re-downloads
+
+### Fixed
+
+- **Race condition in backup cleanup** - Fixed TOCTOU vulnerability
+  - Previous: `ls -t | tail -n +4 | xargs rm` (vulnerable to race conditions)
+  - Now: Uses atomic `find` operations with pattern matching
+  - Only affects `beeper-backup-*` directories, prevents accidental deletion
+
+### Security
+
+| Protection | Attack Vector | Mitigation |
+|------------|---------------|------------|
+| Domain validation | MITM redirect to malicious site | Whitelist trusted domains |
+| HTTP status check | API failures treated as success | Validate 200/302 responses |
+| SHA256 checksum | Corrupted/tampered downloads | Trust-on-first-run verification |
+| Atomic cleanup | TOCTOU race in backup deletion | Use find with pattern matching |
+
 ## [1.2.0] - 2026-01-27
 
 ### Added
@@ -130,6 +167,7 @@ The app downloads updates but can't overwrite pacman-managed files. This script
 downloads directly from Beeper's API, bypassing both the broken built-in updater
 and the often-outdated AUR package.
 
+[1.3.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.3.0
 [1.2.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.2.0
 [1.1.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.1.0
 [1.0.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.0.0
