@@ -2,10 +2,10 @@
 # install.sh - Install update-beeper scripts
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/robertogogoni/update-beeper/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/beeper-community/update-beeper/master/install.sh | bash
 #
 # Or clone and run:
-#   git clone https://github.com/robertogogoni/update-beeper.git
+#   git clone https://github.com/beeper-community/update-beeper.git
 #   cd update-beeper
 #   ./install.sh
 
@@ -17,7 +17,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-REPO="https://raw.githubusercontent.com/robertogogoni/update-beeper/main"
+REPO="https://raw.githubusercontent.com/beeper-community/update-beeper/master"
 INSTALL_DIR="${HOME}/.local/bin"
 
 echo -e "${BLUE}🐝 Installing update-beeper...${NC}"
