@@ -4,7 +4,7 @@
 
 set -e
 
-SCRIPT_VERSION="1.1.0"
+SCRIPT_VERSION="1.2.0"
 LOCKFILE="/tmp/update-beeper.lock"
 BEEPER_API="https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop"
 CHANGELOG_URL="https://www.beeper.com/changelog/desktop"
