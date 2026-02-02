@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Omarchy Integration** - Prevents conflicts with AUR package
+  - Documents proper coexistence with `beeper-v4-bin` AUR package
+  - Provides migration script for omarchy users: removes AUR package tracking
+  - Adds `beeper-v4-bin` to yay ignore list in `omarchy-update-system-pkgs`
+  - See `learnings/beeper-package-conflict-fix.md` for details
+
 - **Domain Validation** - Protects against MITM attacks
   - Verifies download URLs come from trusted Beeper domains only
   - Trusted domains: `beeper.com`, `todesktop.com`, `github.com`
