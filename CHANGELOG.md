@@ -130,6 +130,6 @@ The app downloads updates but can't overwrite pacman-managed files. This script
 downloads directly from Beeper's API, bypassing both the broken built-in updater
 and the often-outdated AUR package.
 
-[1.2.0]: https://github.com/robertogogoni/update-beeper/releases/tag/v1.2.0
-[1.1.0]: https://github.com/robertogogoni/update-beeper/releases/tag/v1.1.0
-[1.0.0]: https://github.com/robertogogoni/update-beeper/releases/tag/v1.0.0
+[1.2.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.2.0
+[1.1.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.1.0
+[1.0.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.0.0
