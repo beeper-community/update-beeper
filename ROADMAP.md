@@ -21,7 +21,7 @@
 
 | Metric | Status |
 |--------|--------|
-| **Current Version** | v1.2.0 |
+| **Current Version** | v1.3.0 |
 | **License** | MIT |
 | **Test Coverage** | Manual + GitHub Actions CI |
 | **Platform** | Arch Linux (x86_64) |
@@ -41,11 +41,11 @@ Beeper's built-in updater doesn't work on Arch Linux when installed from AUR. Th
 ## Version History Timeline
 
 ```
-2026-01-16          2026-01-24          2026-01-28          Future
+2026-01-16          2026-01-24          2026-01-28          2026-02-02
     │                   │                   │                   │
     ▼                   ▼                   ▼                   ▼
 ┌─────────┐       ┌─────────┐       ┌─────────┐       ┌─────────┐
-│  v1.0   │──────▶│  v1.1   │──────▶│  v1.2   │──────▶│  v1.3+  │
+│  v1.0   │──────▶│  v1.1   │──────▶│  v1.2   │──────▶│  v1.3   │
 │ Initial │       │Reliable │       │UX & Mon │       │Security │
 └─────────┘       └─────────┘       └─────────┘       └─────────┘
 ```
@@ -143,25 +143,30 @@ Making updates conversational and adding health monitoring.
 
 ---
 
-### v1.3.0 (Planned) - Security Hardening
+### v1.3.0 (2026-02-02) - Security Hardening
 
-Strengthening the update process against failures and attacks.
+Focus on supply chain security and download integrity.
 
-**Download Security:**
-- [ ] Validate download URL matches expected Beeper domain
-- [ ] HTTP status code checking before download
-- [ ] Checksum verification (SHA256) when available from API
-- [ ] Certificate pinning for API requests
+**Security Enhancements:**
+- Domain validation: Verify download URLs come from trusted Beeper domains only
+- HTTP status checking: Fail properly on API errors instead of silent failures
+- Checksum verification: SHA256 trust-on-first-run model for download integrity
+- Race condition fix: Safer backup cleanup using atomic find operations
 
-**Race Condition Fixes:**
-- [ ] Atomic file operations during installation
-- [ ] Better handling of concurrent Beeper launches during update
-- [ ] Cleanup of stale lockfiles from crashed processes
+**New CLI Options:**
+- `--skip-checksum` - Bypass checksum verification for forced re-downloads
 
-**Error Handling:**
-- [ ] Structured error codes for scripting
-- [ ] JSON output mode for integration with other tools
-- [ ] Detailed logging to file for debugging
+**Technical Details:**
+
+| Protection | Attack Vector | Mitigation |
+|------------|---------------|------------|
+| Domain validation | MITM redirect to malicious site | Whitelist: beeper.com, todesktop.com |
+| HTTP status check | API failures treated as success | Validate 200/302 responses |
+| SHA256 checksum | Corrupted/tampered downloads | Trust-on-first-run verification |
+| Atomic cleanup | TOCTOU race in backup deletion | Use find with pattern matching |
+
+**File Locations:**
+- Checksum cache: `~/.cache/update-beeper/checksums.txt`
 
 ---
 
@@ -298,9 +303,10 @@ Strengthening the update process against failures and attacks.
 | Jarvis wrapper | - | - | ✅ | ✅ |
 | Claude Code skill | - | - | ✅ | ✅ |
 | **Security** |
-| Download URL validation | - | - | - | 🔜 |
-| HTTP status checking | - | - | - | 🔜 |
-| Checksum verification | - | - | - | 🔜 |
+| Download URL validation | - | - | - | ✅ |
+| HTTP status checking | - | - | - | ✅ |
+| Checksum verification | - | - | - | ✅ |
+| `--skip-checksum` | - | - | - | ✅ |
 
 ---
 
@@ -310,10 +316,10 @@ Strengthening the update process against failures and attacks.
 
 | Feature | Priority | Description |
 |---------|----------|-------------|
-| AUR package submission | High | Submit `update-beeper` itself to AUR for easy installation |
+| Structured error codes | High | Exit codes for different failure types |
 | JSON output mode | Medium | `--json` flag for machine-readable output |
-| Structured error codes | Medium | Exit codes for different failure types |
-| Logging to file | Low | Optional `--log` flag for debugging |
+| Logging to file | Medium | Optional `--log` flag for debugging |
+| AUR package submission | Low | Submit `update-beeper` itself to AUR for easy installation |
 
 ### Mid-Term (v1.5.0)
 
@@ -405,4 +411,4 @@ This project aims to do one thing well: keep Beeper updated on Arch Linux. When 
 
 ---
 
-*Last updated: 2026-02-02 | Current version: v1.2.0*
+*Last updated: 2026-02-02 | Current version: v1.3.0*

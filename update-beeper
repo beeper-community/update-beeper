@@ -4,7 +4,7 @@
 
 set -e
 
-SCRIPT_VERSION="1.2.0"
+SCRIPT_VERSION="1.3.0"
 LOCKFILE="/tmp/update-beeper.lock"
 BEEPER_API="https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop"
 CHANGELOG_URL="https://www.beeper.com/changelog/desktop"
@@ -20,6 +20,9 @@ WAYLAND_FLAGS="--enable-features=UseOzonePlatform --ozone-platform=wayland --dis
 
 # Minimum expected AppImage size (Beeper is ~200MB)
 MIN_APPIMAGE_SIZE=150000000  # 150MB
+
+# Checksum cache for trust-on-first-run verification
+CHECKSUM_CACHE="$HOME/.cache/update-beeper/checksums.txt"
 
 # Minimum required free space (500MB for download + extraction + buffer)
 MIN_FREE_SPACE_MB=500
@@ -47,6 +50,7 @@ QUIET=false
 DO_ROLLBACK=false
 SCRIPT_EXIT_CODE=0
 SHOW_VERSIONS=false
+SKIP_CHECKSUM=false
 
 # Track which backup to use for rollback
 ROLLBACK_BACKUP=""
@@ -60,7 +64,8 @@ usage() {
     echo "  --notify, -n      Send desktop notification (for cron/timer use)"
     echo "  --force, -f       Force update even if already on latest"
     echo "  --quiet, -q       Quiet mode - only output on errors (for cron/systemd)"
-echo "  --versions        Show all version info (installed, latest, AUR)"
+    echo "  --versions        Show all version info (installed, latest, AUR)"
+    echo "  --skip-checksum   Skip SHA256 checksum verification (for forced re-downloads)"
     echo "  --rollback, -r    Rollback to previous backup version"
     echo "  --version, -v     Show script version"
     echo "  --help, -h        Show this help message"
@@ -89,6 +94,7 @@ while [[ $# -gt 0 ]]; do
         --force|-f) FORCE=true; shift ;;
         --quiet|-q) QUIET=true; shift ;;
         --versions) SHOW_VERSIONS=true; shift ;;
+        --skip-checksum) SKIP_CHECKSUM=true; shift ;;
         --rollback|-r) DO_ROLLBACK=true; shift ;;
         --version|-v) show_version ;;
         --help|-h) usage ;;
@@ -256,24 +262,69 @@ check_versions() {
 
     # Get latest version from API (with 10s timeout to prevent hanging)
     # Sets globals: DOWNLOAD_URL, LATEST, AUR
-    DOWNLOAD_URL=$(curl -Ls -m 10 -o /dev/null -w "%{url_effective}" "$BEEPER_API" 2>/dev/null)
-    LATEST=$(echo "$DOWNLOAD_URL" | grep -oP 'Beeper-\K[0-9]+\.[0-9]+\.[0-9]+')
 
-    # Validate LATEST extraction - if empty, API redirect may have failed
-    if [[ -z "$LATEST" ]]; then
-        # Try alternative: extract from any version pattern in URL
-        LATEST=$(echo "$DOWNLOAD_URL" | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    fi
-    if [[ -z "$LATEST" ]]; then
+    # First check HTTP status code to detect server errors
+    local http_status
+    http_status=$(curl -Ls -m 10 -o /dev/null -w "%{http_code}" "$BEEPER_API" 2>/dev/null)
+    if [[ "$http_status" != "200" ]] && [[ "$http_status" != "302" ]] && [[ "$http_status" != "301" ]]; then
+        echo -e "${RED}   ✗ Beeper API returned HTTP $http_status${NC}" >&2
         LATEST="unknown"
+        DOWNLOAD_URL=""
+    else
+        DOWNLOAD_URL=$(curl -Ls -m 10 -o /dev/null -w "%{url_effective}" "$BEEPER_API" 2>/dev/null)
+        LATEST=$(echo "$DOWNLOAD_URL" | grep -oP 'Beeper-\K[0-9]+\.[0-9]+\.[0-9]+')
+
+        # Validate LATEST extraction - if empty, API redirect may have failed
+        if [[ -z "$LATEST" ]]; then
+            # Try alternative: extract from any version pattern in URL
+            LATEST=$(echo "$DOWNLOAD_URL" | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        fi
+        if [[ -z "$LATEST" ]]; then
+            LATEST="unknown"
+        fi
     fi
 
     # Get AUR version (with 10s timeout, using POSIX-compliant [0-9] instead of \d)
-    AUR=$(curl -sL -m 10 "https://aur.archlinux.org/packages/beeper-v4-bin" 2>/dev/null | \
-          grep -oP '4\.[0-9]+\.[0-9]+' | head -1)
-    if [[ -z "$AUR" ]]; then
+    # First check HTTP status
+    local aur_http_status
+    aur_http_status=$(curl -sL -m 10 -o /dev/null -w "%{http_code}" "https://aur.archlinux.org/packages/beeper-v4-bin" 2>/dev/null)
+    if [[ "$aur_http_status" != "200" ]]; then
+        echo -e "${YELLOW}   ⚠ AUR returned HTTP $aur_http_status${NC}" >&2
         AUR="unknown"
+    else
+        AUR=$(curl -sL -m 10 "https://aur.archlinux.org/packages/beeper-v4-bin" 2>/dev/null | \
+              grep -oP '4\.[0-9]+\.[0-9]+' | head -1)
+        if [[ -z "$AUR" ]]; then
+            AUR="unknown"
+        fi
     fi
+}
+
+#──────────────────────────────────────────────────────────────────────────────
+# URL SECURITY VALIDATION
+#──────────────────────────────────────────────────────────────────────────────
+
+# Trusted domains for Beeper downloads (pipe-separated for grep -E)
+TRUSTED_DOMAINS="beeper\.com|todesktop\.com|github\.com"
+
+validate_download_url() {
+    local url="$1"
+    local domain
+
+    # Extract domain from URL (handles both http and https)
+    domain=$(echo "$url" | sed -E 's|https?://([^/]+).*|\1|')
+
+    # Check if domain matches trusted patterns (including subdomains)
+    if ! echo "$domain" | grep -qE "(^|\.)(${TRUSTED_DOMAINS})$"; then
+        echo -e "${RED}❌ SECURITY WARNING: Untrusted download domain: $domain${NC}"
+        echo -e "   Expected domains: beeper.com, todesktop.com, or github.com"
+        echo -e "   Download URL: $url"
+        echo -e ""
+        echo -e "   This could indicate a man-in-the-middle attack or API change."
+        echo -e "   Please verify the URL manually before proceeding."
+        exit 1
+    fi
+    echo -e "${GREEN}   ✓ Download domain verified: $domain${NC}"
 }
 
 show_versions() {
@@ -463,6 +514,53 @@ verify_download() {
     return 0
 }
 
+verify_checksum() {
+    local file="$1"
+    local version="$2"
+
+    # Skip if flag is set
+    if [[ "$SKIP_CHECKSUM" == true ]]; then
+        echo -e "${YELLOW}   ⚠ Checksum verification skipped (--skip-checksum)${NC}"
+        return 0
+    fi
+
+    # Ensure cache directory exists
+    mkdir -p "$(dirname "$CHECKSUM_CACHE")"
+
+    # Calculate SHA256 of downloaded file
+    local actual_hash
+    actual_hash=$(sha256sum "$file" | cut -d' ' -f1)
+
+    if [[ -z "$actual_hash" ]]; then
+        echo -e "${RED}   ✗ Failed to calculate checksum${NC}"
+        return 1
+    fi
+
+    # Look up expected hash for this version
+    local expected_hash
+    expected_hash=$(grep "^$version " "$CHECKSUM_CACHE" 2>/dev/null | cut -d' ' -f2)
+
+    if [[ -z "$expected_hash" ]]; then
+        # First time seeing this version - trust on first run
+        echo "   Recording checksum for version $version (trust-on-first-run)"
+        echo "$version $actual_hash" >> "$CHECKSUM_CACHE"
+        echo -e "${GREEN}   ✓ Checksum recorded: ${actual_hash:0:16}...${NC}"
+        return 0
+    fi
+
+    # Compare checksums
+    if [[ "$actual_hash" == "$expected_hash" ]]; then
+        echo -e "${GREEN}   ✓ Checksum verified: ${actual_hash:0:16}...${NC}"
+        return 0
+    else
+        echo -e "${RED}   ✗ Checksum mismatch! File may be corrupted or tampered.${NC}"
+        echo -e "${RED}     Expected: ${expected_hash:0:16}...${NC}"
+        echo -e "${RED}     Got:      ${actual_hash:0:16}...${NC}"
+        echo -e "${YELLOW}   Use --skip-checksum to bypass (for forced re-downloads)${NC}"
+        return 1
+    fi
+}
+
 verify_extraction() {
     local extract_dir="$1"
     local critical_files=("beepertexts" "snapshot_blob.bin" "v8_context_snapshot.bin" "resources/app/package.json")
@@ -649,8 +747,19 @@ backup_current() {
         echo "   Creating backup: $ROLLBACK_BACKUP"
         sudo cp -a "$INSTALL_DIR" "$BACKUP_DIR/$ROLLBACK_BACKUP"
 
-        # Keep only last 3 backups (subshell to avoid directory leak)
-        (cd "$BACKUP_DIR" && ls -t | tail -n +4 | xargs -r sudo rm -rf)
+        # Keep only last 3 backups (safer: use find with -maxdepth to avoid descending)
+        # Delete backup directories older than the 3rd newest
+        local backup_count
+        backup_count=$(find "$BACKUP_DIR" -maxdepth 1 -type d -name 'beeper-backup-*' | wc -l)
+
+        if [[ $backup_count -gt 3 ]]; then
+            # Get list of backups sorted by modification time, skip newest 3
+            find "$BACKUP_DIR" -maxdepth 1 -type d -name 'beeper-backup-*' -printf '%T@ %p\n' | \
+                sort -n | head -n -3 | cut -d' ' -f2- | \
+                while read -r old_backup; do
+                    sudo rm -rf "$old_backup"
+                done
+        fi
     fi
 }
 
@@ -831,8 +940,21 @@ do_direct_install() {
         #── Step 1: Download ──────────────────────────────────────────────────
         echo -e "${BLUE}📥 Downloading... (attempt $download_attempt/$MAX_DOWNLOAD_RETRIES)${NC}"
 
-        if ! curl -L --progress-bar -o "$TMP_DIR/$appimage" "$DOWNLOAD_URL"; then
-            echo -e "${RED}   ✗ Download failed${NC}"
+        # Use -f to fail on HTTP errors (4xx, 5xx), capture HTTP status for better error reporting
+        local download_http_code
+        download_http_code=$(curl -L -f --progress-bar -w "%{http_code}" -o "$TMP_DIR/$appimage" "$DOWNLOAD_URL" 2>/dev/null) || true
+
+        # Check if download failed
+        if [[ ! -f "$TMP_DIR/$appimage" ]] || [[ ! -s "$TMP_DIR/$appimage" ]]; then
+            echo -e "${RED}   ✗ Download failed (HTTP $download_http_code)${NC}"
+            fix_and_retry "download" $download_attempt
+            continue
+        fi
+
+        # Verify HTTP status was successful (2xx)
+        if [[ ! "$download_http_code" =~ ^2[0-9][0-9]$ ]]; then
+            echo -e "${RED}   ✗ Download returned HTTP $download_http_code${NC}"
+            rm -f "$TMP_DIR/$appimage"
             fix_and_retry "download" $download_attempt
             continue
         fi
@@ -840,6 +962,12 @@ do_direct_install() {
 
         #── Step 2: Verify download ───────────────────────────────────────────
         if ! verify_download "$TMP_DIR/$appimage"; then
+            fix_and_retry "download" $download_attempt
+            continue
+        fi
+
+        #── Step 2.5: Verify checksum (trust-on-first-run) ────────────────────
+        if ! verify_checksum "$TMP_DIR/$appimage" "$LATEST"; then
             fix_and_retry "download" $download_attempt
             continue
         fi
@@ -1011,6 +1139,10 @@ if [[ -z "$LATEST" || "$LATEST" == "unknown" ]]; then
     echo -e "${RED}❌ Could not determine latest version from Beeper API${NC}"
     exit 1
 fi
+
+# Validate download URL is from trusted domain (security check)
+log "${BLUE}🔒 Validating download source...${NC}"
+validate_download_url "$DOWNLOAD_URL"
 
 # Compare versions
 if [[ "$FORCE" != true ]] && version_gte "$INSTALLED" "$LATEST"; then
