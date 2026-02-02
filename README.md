@@ -1,51 +1,187 @@
-# update-beeper
+<p align="center">
 
 ```
-    ╔══════════════════════════════════════════════════════════════════════════╗
-    ║                                                                          ║
-    ║   ██████╗ ███████╗███████╗██████╗ ███████╗██████╗                        ║
-    ║   ██╔══██╗██╔════╝██╔════╝██╔══██╗██╔════╝██╔══██╗                       ║
-    ║   ██████╔╝█████╗  █████╗  ██████╔╝█████╗  ██████╔╝                       ║
-    ║   ██╔══██╗██╔══╝  ██╔══╝  ██╔═══╝ ██╔══╝  ██╔══██╗                       ║
-    ║   ██████╔╝███████╗███████╗██║     ███████╗██║  ██║                       ║
-    ║   ╚═════╝ ╚══════╝╚══════╝╚═╝     ╚══════╝╚═╝  ╚═╝                       ║
-    ║                                                                          ║
-    ║   ██╗   ██╗██████╗ ██████╗  █████╗ ████████╗███████╗██████╗              ║
-    ║   ██║   ██║██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔════╝██╔══██╗             ║
-    ║   ██║   ██║██████╔╝██║  ██║███████║   ██║   █████╗  ██████╔╝             ║
-    ║   ██║   ██║██╔═══╝ ██║  ██║██╔══██║   ██║   ██╔══╝  ██╔══██╗             ║
-    ║   ╚██████╔╝██║     ██████╔╝██║  ██║   ██║   ███████╗██║  ██║             ║
-    ║    ╚═════╝ ╚═╝     ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝             ║
-    ║                                                                          ║
-    ║                🐝  Self-healing • Auto-rollback • Arch Linux  🐝         ║
-    ║                                                                          ║
-    ╚══════════════════════════════════════════════════════════════════════════╝
+                          ██╗   ██╗██████╗ ██████╗  █████╗ ████████╗███████╗
+                          ██║   ██║██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔════╝
+                          ██║   ██║██████╔╝██║  ██║███████║   ██║   █████╗  
+                          ██║   ██║██╔═══╝ ██║  ██║██╔══██║   ██║   ██╔══╝  
+                          ╚██████╔╝██║     ██████╔╝██║  ██║   ██║   ███████╗
+                           ╚═════╝ ╚═╝     ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝
+    ╔═══════════════════════════════════════════════════════════════════════════════════╗
+    ║                                                                                   ║
+    ║      ██████╗ ███████╗███████╗██████╗ ███████╗██████╗         __         __        ║
+    ║      ██╔══██╗██╔════╝██╔════╝██╔══██╗██╔════╝██╔══██╗       /  \.-"""-./  \       ║
+    ║      ██████╔╝█████╗  █████╗  ██████╔╝█████╗  ██████╔╝      /    \_   _/    \      ║
+    ║      ██╔══██╗██╔══╝  ██╔══╝  ██╔═══╝ ██╔══╝  ██╔══██╗     /  (   \ | /   )  \     ║
+    ║      ██████╔╝███████╗███████╗██║     ███████╗██║  ██║    |    \___\|/___/    |    ║
+    ║      ╚═════╝ ╚══════╝╚══════╝╚═╝     ╚══════╝╚═╝  ╚═╝     \      /_\      /      ║
+    ║                                                             '-.._____...-'        ║
+    ║   ════════════════════════════════════════════════════════════════════════════    ║
+    ║                                                                                   ║
+    ║          🐝 Self-healing  •  Auto-rollback  •  Arch Linux  •  Wayland 🐝          ║
+    ║                                                                                   ║
+    ╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
+
+</p>
 
 <p align="center">
   <a href="https://www.beeper.com/changelog/desktop">
     <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/beeper-community/update-beeper/master/.github/badges/beeper-version.json&style=for-the-badge" alt="Beeper Latest">
   </a>
-  &nbsp;&nbsp;
+  &nbsp;
   <a href="https://aur.archlinux.org/packages/beeper-v4-bin">
     <img src="https://img.shields.io/aur/version/beeper-v4-bin?label=AUR&style=for-the-badge&color=1793d1" alt="AUR Version">
   </a>
-</p>
-
-<p align="center">
-  <i>Is AUR behind? This script gets you the latest directly from Beeper!</i>
-</p>
-
-<p align="center">
+  &nbsp;
   <a href="https://github.com/beeper-community/update-beeper/actions/workflows/lint.yml">
-    <img src="https://github.com/beeper-community/update-beeper/actions/workflows/lint.yml/badge.svg" alt="Lint">
+    <img src="https://img.shields.io/github/actions/workflow/status/beeper-community/update-beeper/lint.yml?label=lint&style=for-the-badge" alt="Lint">
   </a>
+  &nbsp;
   <a href="https://opensource.org/licenses/MIT">
-    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
+    <img src="https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge" alt="License: MIT">
   </a>
 </p>
 
-A self-healing Beeper Desktop updater for Linux, built specifically for Arch Linux users.
+<p align="center">
+  <b>A self-healing Beeper Desktop updater for Arch Linux</b><br>
+  <i>Because Beeper's "Update Available" button should actually work</i>
+</p>
+
+<p align="center">
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-the-problem">The Problem</a> •
+  <a href="#-features">Features</a> •
+  <a href="#-installation">Installation</a> •
+  <a href="#-usage">Usage</a> •
+  <a href="#-automatic-updates">Automation</a>
+</p>
+
+---
+
+## 🚀 Quick Start
+
+```bash
+# One-line install
+curl -fsSL https://raw.githubusercontent.com/beeper-community/update-beeper/master/install.sh | bash
+
+# Check your version status
+beeper-version
+
+# Update to latest
+update-beeper
+```
+
+---
+
+## 🎯 The Problem
+
+<table>
+<tr>
+<td width="50%">
+
+### ❌ BEFORE (Broken)
+
+```
+┌────────────────────────────────────┐
+│  🐝 Beeper Desktop                 │
+│                                    │
+│  ┌──────────────────────────────┐  │
+│  │                              │  │
+│  │    "Update Available!"       │  │
+│  │                              │  │
+│  │    [ Restart to Update ]     │  │
+│  │                              │  │
+│  └──────────────────────────────┘  │
+│                                    │
+│  * clicks button *                 │
+│  * restarts *                      │
+│  * still on old version *          │
+│                                    │
+│  😤 Nothing happened!              │
+│                                    │
+└────────────────────────────────────┘
+```
+
+</td>
+<td width="50%">
+
+### ✅ AFTER (This Script)
+
+```
+┌────────────────────────────────────┐
+│  $ update-beeper                   │
+│                                    │
+│  🐝 Checking for updates...        │
+│  ├─ Installed: 4.2.482             │
+│  ├─ Latest:    4.2.495             │
+│  └─ Update available!              │
+│                                    │
+│  📥 Downloading... done            │
+│  📦 Extracting... done             │
+│  🔍 Verifying... done              │
+│  💾 Installing... done             │
+│  ✓ Beeper updated to 4.2.495!      │
+│                                    │
+│  🎉 You're on the latest version!  │
+│                                    │
+└────────────────────────────────────┘
+```
+
+</td>
+</tr>
+</table>
+
+### Why Does This Happen?
+
+```
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                                                                         │
+    │   🐝 Beeper's Built-in Updater     vs     📦 AUR Package System        │
+    │                                                                         │
+    │   "I'll replace my own files"      vs     "Pacman owns those files"    │
+    │                                                                         │
+    │              │                                     │                    │
+    │              ▼                                     ▼                    │
+    │   ┌─────────────────────┐              ┌─────────────────────┐         │
+    │   │ Downloads update    │              │ Blocks modification │         │
+    │   │ Tries to write      │───CONFLICT───│ "Permission denied" │         │
+    │   │ files in /opt       │              │ Files stay the same │         │
+    │   └─────────────────────┘              └─────────────────────┘         │
+    │                                                                         │
+    │                          RESULT: Silent failure                        │
+    │                          You think you updated, but you didn't         │
+    │                                                                         │
+    └─────────────────────────────────────────────────────────────────────────┘
+```
+
+**PLUS:** Even `yay -Syu beeper-v4-bin` is often behind—the AUR depends on a maintainer noticing the release.
+
+---
+
+## ✨ Features
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║   FEATURE                           STATUS              PROGRESS             ║
+║   ─────────────────────────────────────────────────────────────────────────  ║
+║                                                                              ║
+║   🚀 Direct Download from API       Complete            [##########] 100%   ║
+║   🔄 Self-Healing Retry Logic       Complete            [##########] 100%   ║
+║   ⏪ Automatic Rollback             Complete            [##########] 100%   ║
+║   🏥 Health Monitor (blank fix)     Complete            [##########] 100%   ║
+║   🗣️  Natural Language Commands      Complete            [##########] 100%   ║
+║   🛫 Pre-flight Validation          Complete            [##########] 100%   ║
+║   📦 AUR Version Awareness          Complete            [##########] 100%   ║
+║   ⏰ Systemd Timer Automation       Complete            [##########] 100%   ║
+║   🖥️  Native Wayland Support         Complete            [##########] 100%   ║
+║   🔒 Concurrent Run Prevention      Complete            [##########] 100%   ║
+║   🔔 Desktop Notifications          Complete            [##########] 100%   ║
+║   🤫 Quiet Mode for Cron            Complete            [##########] 100%   ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
 
 <details>
 <summary><b>🆕 What's New in v1.2</b> (click to expand)</summary>
@@ -73,95 +209,49 @@ A self-healing Beeper Desktop updater for Linux, built specifically for Arch Lin
 
 </details>
 
-## Why This Exists
+---
 
-### The Problem: Beeper's Built-in Updater Doesn't Work on Arch
-
-If you've installed Beeper from the AUR (`beeper-v4-bin`), you've probably noticed that clicking **"Update Available"** inside Beeper does... nothing. The app downloads the update, prompts you to restart, and then you're still on the old version.
-
-**Why?** Beeper's built-in updater is designed for standalone AppImage installations where it can replace itself. But on Arch Linux, Beeper is managed by pacman/yay through the AUR package. The app can't overwrite files that pacman owns—so the update silently fails, leaving you stuck on the old version with no error message.
-
-### The Problem: AUR Is Always Behind
-
-Even if you run `yay -Syu beeper-v4-bin`, you're often still behind. The AUR package depends on a maintainer to notice a new release, update the `PKGBUILD`, and push it. This can take hours or even days. Meanwhile, Beeper has already released a newer version that you can't get.
-
-**This script solves both problems:**
-- ✅ Downloads directly from Beeper's API (always the latest)
-- ✅ Installs immediately without waiting for AUR
-- ✅ Tells you when AUR catches up so you can resync
-
-### Bonus: Self-Healing After a Real Failure
-
-During development, a routine update broke everything—the AppImage extraction silently failed, leaving critical V8 snapshot files missing:
+## 📊 How It Works
 
 ```
-FATAL:gin/v8_initializer.cc:705] Error loading V8 startup snapshot file
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                           UPDATE PIPELINE FLOW                               ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────┐ ║
+║    │  CHECK   │───▶│ DOWNLOAD │───▶│ EXTRACT  │───▶│ INSTALL  │───▶│VERIFY│ ║
+║    │ VERSION  │    │ APPIMAGE │    │  FILES   │    │ TO /opt  │    │START │ ║
+║    └────┬─────┘    └────┬─────┘    └────┬─────┘    └────┬─────┘    └──┬───┘ ║
+║         │               │               │               │              │     ║
+║         │ up to date    │ <150MB?       │ missing       │ perm         │fail ║
+║         ▼               ▼   files?      ▼   error?      ▼              ▼     ║
+║    ┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐    ┌───────┐ ║
+║    │ EXIT OK │     │  RETRY  │     │  RETRY  │     │  RETRY  │    │ROLLBCK│ ║
+║    │  ✓ 🐝   │     │ (2x max)│     │ (2x max)│     │ (2x max)│    │RESTORE│ ║
+║    └─────────┘     └─────────┘     └─────────┘     └─────────┘    └───────┘ ║
+║                                                                              ║
+║    ════════════════════════════════════════════════════════════════════════  ║
+║                                                                              ║
+║    📁 CRITICAL FILES VERIFIED:                                               ║
+║    ├── beepertexts              (main binary)                                ║
+║    ├── snapshot_blob.bin        (V8 JavaScript snapshot)                     ║
+║    ├── v8_context_snapshot.bin  (V8 context snapshot)                        ║
+║    └── resources/app/package.json (version source of truth)                  ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 ```
 
-Beeper crashed on startup. No warning during install. No automatic recovery. This script now verifies every critical file and automatically rolls back if anything goes wrong.
+---
 
-## How Beeper Updates Work (And Why They Break)
+## 📦 Installation
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    BEEPER'S BUILT-IN UPDATE (Broken on Arch)                │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   1. Beeper detects new version via API                                     │
-│   2. Downloads update in background                                         │
-│   3. Prompts: "Restart to update"                                           │
-│   4. User restarts...                                                       │
-│   5. ❌ Update fails silently (pacman owns the files)                       │
-│   6. User is still on old version, confused                                 │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    THIS SCRIPT (Works on Arch)                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   1. Queries Beeper API for latest version                                  │
-│   2. Compares against installed version                                     │
-│   3. Downloads AppImage directly from Beeper                                │
-│   4. Extracts and verifies all critical files                               │
-│   5. Backs up current installation                                          │
-│   6. Installs with proper permissions (sudo)                                │
-│   7. Verifies Beeper starts and runs stable                                 │
-│   8. ✅ You're on the latest version!                                       │
-│                                                                             │
-│   If anything fails → automatic rollback to backup                          │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-## Features
-
-```
-  ┌─────────────────────────────────────────────────────────────────┐
-  │  🚀 DIRECT DOWNLOAD   Gets latest from Beeper API, skip AUR    │
-  │  🔄 SELF-HEALING      Retries with targeted fixes              │
-  │  ⏪ AUTO-ROLLBACK     Restores previous version on failure     │
-  │  🏥 HEALTH MONITOR    Auto-restarts on blank screen (NEW!)     │
-  │  🗣️  NATURAL LANGUAGE  "Update Beeper" just works (NEW!)       │
-  │  🛫 PRE-FLIGHT        Validates permissions, space, network    │
-  │  📦 AUR AWARE         Tells you when AUR catches up            │
-  │  📊 VERSION STATUS    --versions shows all version info        │
-  │  ⏰ AUTO UPDATES      Systemd timer for set-and-forget         │
-  │  🖥️  WAYLAND NATIVE   Auto-configures for Hyprland/Sway/etc    │
-  │  🔒 LOCKFILE          Prevents concurrent update runs          │
-  │  🤫 QUIET MODE        Silent operation for cron/systemd        │
-  └─────────────────────────────────────────────────────────────────┘
-```
-
-## Installation
-
-### Quick Install (Recommended)
+### Option 1: Quick Install (Recommended)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/beeper-community/update-beeper/master/install.sh | bash
 ```
 
-### Manual Install
+### Option 2: Manual Install
 
 ```bash
 # Download scripts
@@ -174,7 +264,7 @@ curl -o ~/.local/bin/beeper-version \
 chmod +x ~/.local/bin/update-beeper ~/.local/bin/beeper-version
 ```
 
-### Clone & Install
+### Option 3: Clone & Install
 
 ```bash
 git clone https://github.com/beeper-community/update-beeper.git
@@ -182,9 +272,11 @@ cd update-beeper
 ./install.sh
 ```
 
-Make sure `~/.local/bin` is in your PATH.
+> **Note:** Make sure `~/.local/bin` is in your PATH.
 
-## Usage
+---
+
+## 🔧 Usage
 
 ### Check Version Status
 
@@ -193,15 +285,18 @@ beeper-version
 ```
 
 ```
-🐝 Beeper Version Status
-─────────────────────────────────────
-
-  Installed:  4.2.482
-  Latest:     4.2.482
-  AUR:        4.2.455
-
-  ✓ You're on the latest version!
-  ℹ AUR is behind by ~27 releases
+╭──────────────────────────────────────╮
+│     🐝 Beeper Version Status         │
+├──────────────────────────────────────┤
+│                                      │
+│   Installed:  4.2.482                │
+│   Latest:     4.2.495                │
+│   AUR:        4.2.455                │
+│                                      │
+│   ⚠ Update available!               │
+│   ℹ AUR is behind by ~40 releases   │
+│                                      │
+╰──────────────────────────────────────╯
 ```
 
 ### Update Beeper
@@ -215,10 +310,9 @@ update-beeper --force      # Force reinstall even if up to date
 update-beeper --notify     # Send desktop notification (for automation)
 update-beeper --quiet      # Silent mode (for cron/systemd)
 update-beeper --rollback   # Manually rollback to previous version
-update-beeper --version    # Show script version
 ```
 
-### Options
+### Command Reference
 
 | Option | Short | Description |
 |--------|-------|-------------|
@@ -226,15 +320,17 @@ update-beeper --version    # Show script version
 | `--changelog` | `-l` | Show changelog for installed version |
 | `--notify` | `-n` | Send desktop notification (for cron/timer use) |
 | `--force` | `-f` | Force update even if already on latest |
-| `--quiet` | `-q` | Quiet mode - only output on errors (for cron/systemd) |
+| `--quiet` | `-q` | Quiet mode - only output on errors |
 | `--versions` | | Show all version info (installed, latest, AUR) |
 | `--rollback` | `-r` | Rollback to previous backup version |
 | `--version` | `-v` | Show script version |
 | `--help` | `-h` | Show help message |
 
-## Automatic Updates (Systemd)
+---
 
-Set up automatic daily update checks with desktop notifications:
+## ⏰ Automatic Updates
+
+### Systemd Timer (Set & Forget)
 
 ```bash
 # Copy systemd user files
@@ -252,40 +348,41 @@ systemctl --user enable --now update-beeper.timer
 systemctl --user list-timers update-beeper.timer
 ```
 
-The timer runs daily between 10:00-14:00 (randomized to avoid hammering Beeper's servers).
+> Runs daily between 10:00-14:00 (randomized to avoid hammering Beeper's servers).
 
-## Natural Language Commands
+---
+
+## 🗣️ Natural Language Commands
 
 ```
-    ╭───────────────────────────────────────────────────────────────╮
-    │                                                               │
-    │      "Update Beeper"         ───▶   🐝 Updating...           │
-    │      "Is Beeper up to date?" ───▶   🐝 Checking...           │
-    │      "Beeper version"        ───▶   🐝 v4.2.495              │
-    │      "Rollback Beeper"       ───▶   🐝 Restoring...          │
-    │                                                               │
-    │            ╱╲                                                  │
-    │           ╱  ╲     Talk to your updater like a human!        │
-    │          ╱ 🐝 ╲    Works with Claude Code, Bash, or Jarvis   │
-    │         ╱______╲                                              │
-    │                                                               │
-    ╰───────────────────────────────────────────────────────────────╯
+╭─────────────────────────────────────────────────────────────────────────────╮
+│                                                                             │
+│       "Update Beeper"              ───▶      🐝 Updating...                │
+│       "Is Beeper up to date?"      ───▶      🐝 Checking...                │
+│       "Beeper version"             ───▶      🐝 v4.2.495                   │
+│       "Rollback Beeper"            ───▶      🐝 Restoring...               │
+│                                                                             │
+│                    Talk to your updater like a human!                       │
+│               Works with Claude Code, Bash aliases, or Jarvis               │
+│                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯
 ```
 
-### Shell Aliases (Bash/Zsh)
+<details>
+<summary><b>Shell Aliases (Bash/Zsh)</b></summary>
 
 Add to your `~/.bashrc` or `~/.zshrc`:
 
 ```bash
 # Quick shortcuts
-alias bu='~/bin/update-beeper'
-alias bv='~/bin/beeper-version'
+alias bu='update-beeper'
+alias bv='beeper-version'
 
 # Natural language wrapper
 beeper() {
     case "$1" in
-        update|upgrade) shift; ~/bin/update-beeper "$@" ;;
-        version|--version|-v) ~/bin/beeper-version ;;
+        update|upgrade) shift; update-beeper "$@" ;;
+        version|--version|-v) beeper-version ;;
         *) echo "Usage: beeper {update|version}" ;;
     esac
 }
@@ -293,7 +390,10 @@ beeper() {
 
 Then use: `bu`, `bv`, `beeper update`, `beeper version`
 
-### Jarvis Wrapper (Natural Language CLI)
+</details>
+
+<details>
+<summary><b>Jarvis Wrapper (Natural Language CLI)</b></summary>
 
 ```bash
 # Install the NL wrapper
@@ -308,7 +408,10 @@ jarvis-beeper "what version of beeper do I have"
 jarvis-beeper "rollback beeper"
 ```
 
-### Claude Code Integration
+</details>
+
+<details>
+<summary><b>Claude Code Integration</b></summary>
 
 The update-beeper skill auto-activates when you say things like:
 - "I need to update Beeper"
@@ -316,31 +419,38 @@ The update-beeper skill auto-activates when you say things like:
 - "Is Beeper up to date?"
 - "Check Beeper version"
 
-## Health Monitoring (Auto-Recovery)
+</details>
+
+---
+
+## 🏥 Health Monitoring
 
 ```
-    ┌─────────────────────────────────────────────────────────────┐
-    │                 🏥 BEEPER HEALTH MONITOR                    │
-    ├─────────────────────────────────────────────────────────────┤
-    │                                                             │
-    │   Every 5 minutes:                                          │
-    │                                                             │
-    │   ┌─────────┐     ┌──────────┐     ┌────────────┐          │
-    │   │ Process │────▶│  Window  │────▶│   Status   │          │
-    │   │ Running?│     │ Visible? │     │            │          │
-    │   └────┬────┘     └────┬─────┘     └────────────┘          │
-    │        │               │                                    │
-    │        │ NO            │ NO (blank screen!)                 │
-    │        ▼               ▼                                    │
-    │   [Log: not      [Auto-restart with                        │
-    │    running]       XWayland mode]                           │
-    │                                                             │
-    │   🔧 Fixes the dreaded "blank screen after sleep" bug      │
-    │                                                             │
-    └─────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                          BEEPER HEALTH MONITOR                               ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║   Fixes the dreaded "blank screen after sleep" bug automatically!            ║
+║                                                                              ║
+║   Every 5 minutes:                                                           ║
+║                                                                              ║
+║   ┌─────────────┐         ┌─────────────┐         ┌─────────────┐           ║
+║   │   Process   │  ──▶    │   Window    │  ──▶    │   Status    │           ║
+║   │   Running?  │         │   Visible?  │         │             │           ║
+║   └──────┬──────┘         └──────┬──────┘         └─────────────┘           ║
+║          │                       │                                           ║
+║          │ NO                    │ NO (blank!)                               ║
+║          ▼                       ▼                                           ║
+║   ┌─────────────┐         ┌─────────────────────────┐                       ║
+║   │   Log: not  │         │   Auto-restart with     │                       ║
+║   │   running   │         │   XWayland fallback     │                       ║
+║   └─────────────┘         └─────────────────────────┘                       ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 ```
 
-### Install Health Monitor
+<details>
+<summary><b>Install Health Monitor</b></summary>
 
 ```bash
 # Download the health check script
@@ -378,78 +488,47 @@ systemctl --user enable --now beeper-health.timer
 
 Logs are written to `/tmp/beeper-health.log` when issues are detected.
 
-## Wayland Support (Hyprland, Sway, etc.)
+</details>
 
-Beeper uses Electron, which can have rendering issues on Wayland compositors. **Blank/white windows** are a common symptom when Electron tries to use XWayland instead of native Wayland rendering.
+---
 
-### Automatic Configuration
+## 🖥️ Wayland Support
+
+Beeper uses Electron, which can have rendering issues on Wayland. **Blank/white windows** are common when Electron tries to use XWayland.
+
+<details>
+<summary><b>Automatic Configuration</b></summary>
 
 When running on Wayland (detected via `$WAYLAND_DISPLAY`), this script automatically:
 
 1. **Tests startup with Wayland flags** - Uses `--enable-features=UseOzonePlatform --ozone-platform=wayland --disable-gpu-compositing`
 2. **Creates desktop file override** - Installs to `~/.local/share/applications/beeper.desktop`
 
-This ensures Beeper always launches with native Wayland rendering, fixing:
+This fixes:
 - Blank/white windows on startup
 - Blank screen after sleep/wake/screensaver cycles
 
-### Manual Fix (if needed)
+</details>
 
-If you installed Beeper before this feature was added, run:
+<details>
+<summary><b>Manual Fix</b></summary>
+
+If you installed Beeper before this feature was added:
 
 ```bash
 update-beeper --force
 ```
 
-This will reinstall and configure Wayland support.
+This reinstalls and configures Wayland support.
 
-### What Doesn't Work
+</details>
 
-Beeper bundles its own Electron runtime, so these common approaches **don't work**:
+---
 
-- `~/.config/electron-flags.conf` - Not read by bundled Electron
-- `~/.config/beepertexts-flags.conf` - Same reason
-- `ELECTRON_OZONE_PLATFORM_HINT` env var - Not respected
+## 🔧 Self-Healing Pipeline
 
-The desktop file override is the reliable solution.
-
-## Self-Healing Pipeline
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                            UPDATE PIPELINE                               │
-├──────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│   📥 Download ──► 📦 Extract ──► 📁 Install ──► 🔍 Verify ──► 🚀 Start  │
-│       │              │              │              │              │      │
-│       ▼              ▼              ▼              ▼              ▼      │
-│   [>150MB?]    [V8 files?]    [Perms OK?]   [Version?]    [Stable?]     │
-│       │              │              │              │              │      │
-│       │ FAIL         │ FAIL         │ FAIL         │ FAIL         │ FAIL │
-│       ▼              ▼              ▼              ▼              ▼      │
-│   ┌──────────────────────────────────────────────────────────────┐      │
-│   │              🔧 RETRY WITH TARGETED FIX (2x)                 │      │
-│   │  • Clear temp dir, re-download                               │      │
-│   │  • Clear extraction, retry                                   │      │
-│   │  • Fix permissions recursively                               │      │
-│   │  • Clear Electron cache                                      │      │
-│   └──────────────────────────────────────────────────────────────┘      │
-│                                      │                                   │
-│                                      │ ALL RETRIES EXHAUSTED             │
-│                                      ▼                                   │
-│   ┌──────────────────────────────────────────────────────────────┐      │
-│   │              ⏪ AUTOMATIC ROLLBACK                            │      │
-│   │  • Restore from pre-update backup                            │      │
-│   │  • Verify rollback works                                     │      │
-│   │  • Notify user of failure                                    │      │
-│   └──────────────────────────────────────────────────────────────┘      │
-│                                                                          │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
-### Critical Files Verified
-
-These files are checked after every extraction—if any are missing, the update retries:
+<details>
+<summary><b>What Gets Verified</b></summary>
 
 | File | Purpose |
 |------|---------|
@@ -458,7 +537,10 @@ These files are checked after every extraction—if any are missing, the update 
 | `v8_context_snapshot.bin` | V8 context snapshot |
 | `resources/app/package.json` | Version source of truth |
 
-### Self-Healing Actions
+</details>
+
+<details>
+<summary><b>Self-Healing Actions</b></summary>
 
 | Failure | Diagnosis | Fix Applied |
 |---------|-----------|-------------|
@@ -468,19 +550,24 @@ These files are checked after every extraction—if any are missing, the update 
 | Startup crash | Corrupted cache | Clear Electron cache dirs |
 | All retries exhausted | Unrecoverable | **Automatic rollback** |
 
-### Code Safety
+</details>
 
-The script follows bash best practices to prevent common issues:
+<details>
+<summary><b>Code Safety Practices</b></summary>
 
 | Practice | Implementation |
 |----------|----------------|
-| **No directory leaks** | All `cd` commands run in subshells `(cd dir && ...)` |
-| **Safe file operations** | All paths are quoted and use absolute references |
-| **Proper error handling** | 46+ commands protected with `|| true` or `2>/dev/null` |
-| **Clean exit** | Trap ensures `/tmp/beeper-update` is cleaned on exit |
-| **Idempotent operations** | Safe to run multiple times without side effects |
+| **No directory leaks** | All `cd` commands run in subshells |
+| **Safe file operations** | All paths quoted, absolute references |
+| **Proper error handling** | 46+ commands protected |
+| **Clean exit** | Trap ensures temp cleanup |
+| **Idempotent operations** | Safe to run multiple times |
 
-## Requirements
+</details>
+
+---
+
+## 📋 Requirements
 
 | Requirement | Notes |
 |-------------|-------|
@@ -490,20 +577,9 @@ The script follows bash best practices to prevent common issues:
 | **sudo** | Required - for installing to /opt |
 | **notify-send** | Optional - for desktop notifications |
 
-### Compatibility Checks
+---
 
-The script automatically verifies your system before running:
-
-```
-✓ Architecture check (x86_64 required)
-✓ Distro detection (warns if not Arch-based)
-✓ Dependency check (curl, sudo)
-✓ Optional: notify-send for notifications
-```
-
-If any required check fails, you'll get a clear error message with instructions.
-
-## File Locations
+## 📁 File Locations
 
 ```
 /opt/beeper/              ← Installation directory
@@ -512,61 +588,76 @@ If any required check fails, you'll get a clear error message with instructions.
 /tmp/beeper-update/       ← Temporary download/extract dir
 ```
 
-## FAQ
+---
 
-**Q: Should I still use the AUR package?**
+## ❓ FAQ
 
-Yes! This script works alongside the AUR package. When AUR catches up, you can run `yay -Syu beeper-v4-bin` to resync. The script will tell you when this happens.
+<details>
+<summary><b>Should I still use the AUR package?</b></summary>
 
-**Q: What if an update breaks something?**
+Yes! This script works alongside the AUR package. When AUR catches up, you can run `yay -Syu beeper-v4-bin` to resync. The script tells you when this happens.
 
-The script automatically rolls back to your previous working version. You'll get a notification and can try again later or report the issue.
+</details>
 
-**Q: Can I automate this?**
+<details>
+<summary><b>What if an update breaks something?</b></summary>
 
-Yes! See the [Automatic Updates](#automatic-updates-systemd) section for systemd timer setup.
+The script automatically rolls back to your previous working version. You'll get a notification and can try again later.
 
-**Q: How do I check my current version status?**
+</details>
 
-Run `beeper-version` for a quick overview of installed, latest, and AUR versions.
+<details>
+<summary><b>Does this work on other distros?</b></summary>
 
-**Q: Does this work on other distros (Ubuntu, Fedora, etc.)?**
-
-Partially. The core update functionality (download, extract, install) works on any Linux distro with x86_64 architecture. However:
+Partially. The core update functionality works on any Linux distro with x86_64 architecture. However:
 - AUR version checking won't work (requires pacman)
 - You'll see a warning about non-Arch distro
 - The script still installs to `/opt/beeper`
 
-**Q: Why x86_64 only?**
+</details>
 
-Beeper Desktop only provides x86_64 (64-bit Intel/AMD) builds. There are no ARM or 32-bit versions available from Beeper.
+<details>
+<summary><b>Why x86_64 only?</b></summary>
 
-**Q: Beeper shows a blank/white window on Hyprland/Sway?**
+Beeper Desktop only provides x86_64 (64-bit Intel/AMD) builds. There are no ARM or 32-bit versions available.
 
-This is an Electron + Wayland issue. Run `update-beeper --force` to reinstall with native Wayland support. The script automatically creates a desktop file override with the correct Ozone platform flags.
+</details>
 
-**Q: Beeper goes blank after sleep/wake or screensaver?**
+<details>
+<summary><b>Beeper shows blank window on Hyprland/Sway?</b></summary>
 
-This is fixed by the `--disable-gpu-compositing` flag, which the script now includes automatically. Run `update-beeper --force` to update your desktop file with this fix.
+Run `update-beeper --force` to reinstall with native Wayland support. The script automatically creates a desktop file override with correct Ozone platform flags.
 
-**Q: I'm on X11, will Wayland flags break anything?**
+</details>
 
-No. The script only applies Wayland configuration when `$WAYLAND_DISPLAY` is set. On X11, Beeper launches normally without any Wayland-specific flags.
+<details>
+<summary><b>Beeper goes blank after sleep/wake?</b></summary>
 
-## Contributing
+Fixed by the `--disable-gpu-compositing` flag, included automatically. Run `update-beeper --force` to update your desktop file.
+
+</details>
+
+---
+
+## 🤝 Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-## Changelog
+## 📜 Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
-## License
+## 📄 License
 
 MIT
 
 ---
 
 <p align="center">
-  <i>Because Beeper's "Update Available" button should actually work</i> 🐝
+  <img src="https://raw.githubusercontent.com/beeper-community/update-beeper/master/.github/assets/bee-divider.png" alt="divider" width="400">
+</p>
+
+<p align="center">
+  <sub>Made with 🐝 for the Beeper community</sub><br>
+  <sub><i>Because "Update Available" should mean something</i></sub>
 </p>
