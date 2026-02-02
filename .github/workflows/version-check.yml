@@ -1,0 +1,127 @@
+name: Version Consistency Check
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'update-beeper'
+      - 'CHANGELOG.md'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'update-beeper'
+      - 'CHANGELOG.md'
+
+jobs:
+  check-version:
+    name: Check Version Consistency
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract versions
+        id: versions
+        run: |
+          # Get SCRIPT_VERSION from update-beeper
+          SCRIPT_VERSION=$(grep -oP 'SCRIPT_VERSION="\K[0-9]+\.[0-9]+\.[0-9]+' update-beeper || echo "")
+          echo "script_version=$SCRIPT_VERSION" >> $GITHUB_OUTPUT
+
+          # Get latest git tag (without v prefix)
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          TAG_VERSION="${LATEST_TAG#v}"
+          echo "tag_version=$TAG_VERSION" >> $GITHUB_OUTPUT
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+          # Get latest version from CHANGELOG.md
+          CHANGELOG_VERSION=$(grep -oP '## \[?\K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1 || echo "")
+          echo "changelog_version=$CHANGELOG_VERSION" >> $GITHUB_OUTPUT
+
+          echo "SCRIPT_VERSION: $SCRIPT_VERSION"
+          echo "Latest tag: $LATEST_TAG ($TAG_VERSION)"
+          echo "CHANGELOG version: $CHANGELOG_VERSION"
+
+      - name: Validate versions
+        run: |
+          SCRIPT="${{ steps.versions.outputs.script_version }}"
+          TAG="${{ steps.versions.outputs.tag_version }}"
+          CHANGELOG="${{ steps.versions.outputs.changelog_version }}"
+
+          ERRORS=0
+
+          echo "=== Version Consistency Check ==="
+          echo ""
+
+          # Check SCRIPT_VERSION exists
+          if [[ -z "$SCRIPT" ]]; then
+            echo "❌ SCRIPT_VERSION not found in update-beeper"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "✓ SCRIPT_VERSION: $SCRIPT"
+          fi
+
+          # Check CHANGELOG has versions
+          if [[ -z "$CHANGELOG" ]]; then
+            echo "❌ No version found in CHANGELOG.md"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "✓ CHANGELOG latest: $CHANGELOG"
+          fi
+
+          # If there's a tag, SCRIPT_VERSION should be >= tag
+          if [[ -n "$TAG" ]] && [[ -n "$SCRIPT" ]]; then
+            # Version comparison
+            if printf '%s\n%s\n' "$TAG" "$SCRIPT" | sort -V -C; then
+              echo "✓ SCRIPT_VERSION ($SCRIPT) >= latest tag ($TAG)"
+            else
+              echo "⚠️  SCRIPT_VERSION ($SCRIPT) is older than latest tag ($TAG)"
+              echo "   This might indicate a version bump was forgotten"
+            fi
+          fi
+
+          # CHANGELOG should document SCRIPT_VERSION
+          if [[ -n "$SCRIPT" ]] && [[ -n "$CHANGELOG" ]]; then
+            if [[ "$CHANGELOG" == "$SCRIPT" ]]; then
+              echo "✓ CHANGELOG documents current SCRIPT_VERSION"
+            elif printf '%s\n%s\n' "$SCRIPT" "$CHANGELOG" | sort -V -C; then
+              echo "✓ CHANGELOG ($CHANGELOG) >= SCRIPT_VERSION ($SCRIPT)"
+            else
+              echo "⚠️  CHANGELOG ($CHANGELOG) doesn't include SCRIPT_VERSION ($SCRIPT)"
+              echo "   Consider updating CHANGELOG.md before releasing"
+            fi
+          fi
+
+          echo ""
+          if [[ $ERRORS -gt 0 ]]; then
+            echo "❌ Found $ERRORS error(s)"
+            exit 1
+          else
+            echo "✓ All version checks passed"
+          fi
+
+      - name: Suggest next steps
+        if: always()
+        run: |
+          SCRIPT="${{ steps.versions.outputs.script_version }}"
+          TAG="${{ steps.versions.outputs.tag_version }}"
+
+          echo ""
+          echo "=== Release Checklist ==="
+
+          if [[ -n "$SCRIPT" ]] && [[ "$SCRIPT" != "$TAG" ]]; then
+            echo "To release v$SCRIPT:"
+            echo "  1. Ensure CHANGELOG.md documents v$SCRIPT changes"
+            echo "  2. Commit all changes"
+            echo "  3. Create tag: git tag v$SCRIPT"
+            echo "  4. Push tag: git push origin v$SCRIPT"
+            echo "  5. Release workflow will create GitHub release automatically"
+          elif [[ "$SCRIPT" == "$TAG" ]]; then
+            echo "✓ Current version ($SCRIPT) is already released"
+            echo "  To release a new version:"
+            echo "  1. Update SCRIPT_VERSION in update-beeper"
+            echo "  2. Update CHANGELOG.md"
+            echo "  3. Commit and tag"
+          fi

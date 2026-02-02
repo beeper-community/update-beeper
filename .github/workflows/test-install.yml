@@ -1,0 +1,157 @@
+name: Test Install Script
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'install.sh'
+      - 'update-beeper'
+      - 'beeper-version'
+      - '.github/workflows/test-install.yml'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'install.sh'
+      - 'update-beeper'
+      - 'beeper-version'
+  workflow_dispatch:
+
+jobs:
+  test-local-install:
+    name: Test Local Install
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test local installation
+        run: |
+          echo "=== Testing local install (from cloned repo) ==="
+
+          # Run install script
+          ./install.sh
+
+          # Verify files were installed
+          echo ""
+          echo "=== Verifying installation ==="
+
+          if [[ ! -f "$HOME/.local/bin/update-beeper" ]]; then
+            echo "❌ update-beeper not found"
+            exit 1
+          fi
+          echo "✓ update-beeper installed"
+
+          if [[ ! -f "$HOME/.local/bin/beeper-version" ]]; then
+            echo "❌ beeper-version not found"
+            exit 1
+          fi
+          echo "✓ beeper-version installed"
+
+          # Verify executable permissions
+          if [[ ! -x "$HOME/.local/bin/update-beeper" ]]; then
+            echo "❌ update-beeper not executable"
+            exit 1
+          fi
+          echo "✓ update-beeper is executable"
+
+          if [[ ! -x "$HOME/.local/bin/beeper-version" ]]; then
+            echo "❌ beeper-version not executable"
+            exit 1
+          fi
+          echo "✓ beeper-version is executable"
+
+          # Verify scripts have valid syntax
+          bash -n "$HOME/.local/bin/update-beeper"
+          echo "✓ update-beeper syntax valid"
+
+          bash -n "$HOME/.local/bin/beeper-version"
+          echo "✓ beeper-version syntax valid"
+
+          echo ""
+          echo "=== Local install test PASSED ==="
+
+  test-remote-install:
+    name: Test Remote Install (curl)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up local server
+        run: |
+          # Start a simple HTTP server to serve repo files
+          python3 -m http.server 8000 &
+          sleep 2
+
+      - name: Test curl installation
+        run: |
+          echo "=== Testing remote install (via curl) ==="
+
+          # Clean any existing install
+          rm -rf "$HOME/.local/bin/update-beeper" "$HOME/.local/bin/beeper-version"
+
+          # Modify install.sh to use local server
+          REPO="http://localhost:8000"
+
+          # Create modified install script for testing
+          sed "s|https://raw.githubusercontent.com/robertogogoni/update-beeper/main|$REPO|g" install.sh > /tmp/test-install.sh
+          chmod +x /tmp/test-install.sh
+
+          # Run the modified install script
+          bash /tmp/test-install.sh
+
+          # Verify files were installed
+          echo ""
+          echo "=== Verifying remote installation ==="
+
+          if [[ ! -f "$HOME/.local/bin/update-beeper" ]]; then
+            echo "❌ update-beeper not found"
+            exit 1
+          fi
+          echo "✓ update-beeper installed"
+
+          if [[ ! -f "$HOME/.local/bin/beeper-version" ]]; then
+            echo "❌ beeper-version not found"
+            exit 1
+          fi
+          echo "✓ beeper-version installed"
+
+          echo ""
+          echo "=== Remote install test PASSED ==="
+
+  test-script-help:
+    name: Test Script Help/Version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test update-beeper --help
+        run: |
+          # --help should exit 0 and show usage
+          ./update-beeper --help | grep -q "Usage:" || {
+            echo "❌ --help doesn't show usage"
+            exit 1
+          }
+          echo "✓ update-beeper --help works"
+
+      - name: Test update-beeper --version
+        run: |
+          VERSION=$(./update-beeper --version)
+          if [[ ! "$VERSION" =~ ^update-beeper\ [0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ --version output unexpected: $VERSION"
+            exit 1
+          fi
+          echo "✓ update-beeper --version works: $VERSION"
+
+      - name: Test beeper-version runs
+        run: |
+          # beeper-version will show "not installed" but shouldn't error
+          ./beeper-version || {
+            echo "❌ beeper-version failed"
+            exit 1
+          }
+          echo "✓ beeper-version runs successfully"

@@ -20,6 +20,8 @@ jobs:
         with:
           scandir: '.'
           severity: warning
+          # Include scripts without .sh extension
+          additional_files: 'update-beeper beeper-version beeper-health jarvis-beeper'
         env:
           SHELLCHECK_OPTS: -e SC2034 -e SC1091
 
@@ -33,8 +35,18 @@ jobs:
 
       - name: Check bash syntax
         run: |
-          for script in update-beeper beeper-version; do
-            echo "Checking $script..."
-            bash -n "$script"
+          # All executable shell scripts in the repo
+          scripts=(
+            "update-beeper"
+            "beeper-version"
+            "beeper-health"
+            "jarvis-beeper"
+            "install.sh"
+          )
+          for script in "${scripts[@]}"; do
+            if [[ -f "$script" ]]; then
+              echo "Checking $script..."
+              bash -n "$script"
+            fi
           done
           echo "✓ All scripts have valid syntax"
