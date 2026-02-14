@@ -1,12 +1,6 @@
 <p align="center">
 
 ```
-                          ██╗   ██╗██████╗ ██████╗  █████╗ ████████╗███████╗
-                          ██║   ██║██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔════╝
-                          ██║   ██║██████╔╝██║  ██║███████║   ██║   █████╗  
-                          ██║   ██║██╔═══╝ ██║  ██║██╔══██║   ██║   ██╔══╝  
-                          ╚██████╔╝██║     ██████╔╝██║  ██║   ██║   ███████╗
-                           ╚═════╝ ╚═╝     ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝
     ╔═══════════════════════════════════════════════════════════════════════════════════╗
     ║                                                                                   ║
     ║      ██████╗ ███████╗███████╗██████╗ ███████╗██████╗         __         __        ║
@@ -59,14 +53,14 @@
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 # One-line install
 curl -fsSL https://raw.githubusercontent.com/beeper-community/update-beeper/master/install.sh | bash
 
 # Check your version status
-beeper-version
+update-beeper --versions
 
 # Update to latest
 update-beeper
@@ -74,176 +68,177 @@ update-beeper
 
 ---
 
-## 🎯 The Problem
+## The Problem
 
 <table>
 <tr>
 <td width="50%">
 
-### ❌ BEFORE (Broken)
+### Before (Broken)
 
 ```
-┌────────────────────────────────────┐
-│  🐝 Beeper Desktop                 │
-│                                    │
-│  ┌──────────────────────────────┐  │
-│  │                              │  │
-│  │    "Update Available!"       │  │
-│  │                              │  │
-│  │    [ Restart to Update ]     │  │
-│  │                              │  │
-│  └──────────────────────────────┘  │
-│                                    │
-│  * clicks button *                 │
-│  * restarts *                      │
-│  * still on old version *          │
-│                                    │
-│  😤 Nothing happened!              │
-│                                    │
-└────────────────────────────────────┘
+  Beeper Desktop
+
+    "Update Available!"
+
+    [ Restart to Update ]
+
+  * clicks button *
+  * restarts *
+  * still on old version *
+
+  Nothing happened!
 ```
 
 </td>
 <td width="50%">
 
-### ✅ AFTER (This Script)
+### After (This Script)
 
 ```
-┌────────────────────────────────────┐
-│  $ update-beeper                   │
-│                                    │
-│  🐝 Checking for updates...        │
-│  ├─ Installed: 4.2.482             │
-│  ├─ Latest:    4.2.495             │
-│  └─ Update available!              │
-│                                    │
-│  📥 Downloading... done            │
-│  📦 Extracting... done             │
-│  🔍 Verifying... done              │
-│  💾 Installing... done             │
-│  ✓ Beeper updated to 4.2.495!      │
-│                                    │
-│  🎉 You're on the latest version!  │
-│                                    │
-└────────────────────────────────────┘
+  🐝 Beeper Updater v1.5.0
+
+  [1/8] Checking versions
+    Installed: 4.2.482
+    Latest:    4.2.547
+
+  [4/8] Downloading Beeper 4.2.547
+    ✓ Download complete — 213MB
+
+  [5/8] Extracting & verifying
+    ✓ All 3 checks passed
+
+  ╭──────────────────────────────────╮
+  │  ✓ Update complete               │
+  │  Version   4.2.482 → 4.2.547    │
+  │  Duration  52s                   │
+  ╰──────────────────────────────────╯
 ```
 
 </td>
 </tr>
 </table>
 
-### Why Does This Happen?
-
-```
-    ┌─────────────────────────────────────────────────────────────────────────┐
-    │                                                                         │
-    │   🐝 Beeper's Built-in Updater     vs     📦 AUR Package System        │
-    │                                                                         │
-    │   "I'll replace my own files"      vs     "Pacman owns those files"    │
-    │                                                                         │
-    │              │                                     │                    │
-    │              ▼                                     ▼                    │
-    │   ┌─────────────────────┐              ┌─────────────────────┐         │
-    │   │ Downloads update    │              │ Blocks modification │         │
-    │   │ Tries to write      │───CONFLICT───│ "Permission denied" │         │
-    │   │ files in /opt       │              │ Files stay the same │         │
-    │   └─────────────────────┘              └─────────────────────┘         │
-    │                                                                         │
-    │                          RESULT: Silent failure                        │
-    │                          You think you updated, but you didn't         │
-    │                                                                         │
-    └─────────────────────────────────────────────────────────────────────────┘
-```
-
-**PLUS:** Even `yay -Syu beeper-v4-bin` is often behind—the AUR depends on a maintainer noticing the release.
-
----
-
-## ✨ Features
-
-```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                                                                              ║
-║   FEATURE                           STATUS              PROGRESS             ║
-║   ─────────────────────────────────────────────────────────────────────────  ║
-║                                                                              ║
-║   🚀 Direct Download from API       Complete            [##########] 100%   ║
-║   🔄 Self-Healing Retry Logic       Complete            [##########] 100%   ║
-║   ⏪ Automatic Rollback             Complete            [##########] 100%   ║
-║   🏥 Health Monitor (blank fix)     Complete            [##########] 100%   ║
-║   🗣️  Natural Language Commands      Complete            [##########] 100%   ║
-║   🛫 Pre-flight Validation          Complete            [##########] 100%   ║
-║   📦 AUR Version Awareness          Complete            [##########] 100%   ║
-║   ⏰ Systemd Timer Automation       Complete            [##########] 100%   ║
-║   🖥️  Native Wayland Support         Complete            [##########] 100%   ║
-║   🔒 Concurrent Run Prevention      Complete            [##########] 100%   ║
-║   🔔 Desktop Notifications          Complete            [##########] 100%   ║
-║   🤫 Quiet Mode for Cron            Complete            [##########] 100%   ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-```
-
 <details>
-<summary><b>🆕 What's New in v1.2</b> (click to expand)</summary>
+<summary><b>Why does Beeper's built-in update fail?</b></summary>
 
-```
-    ·  ·    ·                                          ·    ·  ·
-         · 🐝  ·                                      ·  🐝 ·
-      ·        ·   NEW FEATURES HAVE LANDED!      ·        ·
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Beeper's built-in updater tries to replace its own files in `/opt`, but the AUR package manager (`pacman`) owns those files and blocks modifications. The result is a **silent failure** — you think you updated, but nothing changed.
 
-    🗣️  NATURAL LANGUAGE     Say "Update Beeper" - it just works!
-                             Shell aliases, Jarvis wrapper, Claude Code
-
-    🏥  HEALTH MONITORING    Auto-restarts Beeper on blank screen
-                             Systemd timer checks every 5 minutes
-
-    📊  --versions FLAG      See all versions at a glance:
-                             Installed • Latest • AUR
-
-    🐛  BUG FIXES            Version detection now uses package.json
-                             (source of truth) instead of pacman
-
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
+This script bypasses the conflict by downloading directly from Beeper's API and installing with proper permissions.
 
 </details>
 
 ---
 
-## 📊 How It Works
+## Features
 
+| Feature                                | Since |
+|----------------------------------------|-------|
+| Direct download from Beeper API        | v1.0  |
+| Self-healing retry logic (2x per stage)| v1.0  |
+| Automatic rollback on failure          | v1.0  |
+| Native Wayland support                 | v1.0  |
+| AUR version awareness                  | v1.0  |
+| Concurrent run prevention (flock)      | v1.1  |
+| Quiet mode for cron/systemd            | v1.1  |
+| Desktop notifications                  | v1.1  |
+| Manual rollback (`--rollback`)         | v1.1  |
+| Natural language commands              | v1.2  |
+| Health monitor (blank screen fix)      | v1.2  |
+| `--versions` flag                      | v1.2  |
+| SHA256 checksum verification           | v1.3  |
+| Domain validation (MITM protection)    | v1.3  |
+| AUR JSON RPC API (replaces scraping)   | v1.4  |
+| Structured logging & `--history`       | v1.4  |
+| `--dry-run` preview mode               | v1.4  |
+| ELF binary verification                | v1.4  |
+| Download resume (`curl -C -`)          | v1.4  |
+| Beeper-branded true color UI           | v1.5  |
+| Collapsible check groups               | v1.5  |
+| Summary box with unicode borders       | v1.5  |
+
+<details>
+<summary><b>What's New in v1.5</b></summary>
+
+Full visual overhaul using Beeper's brand identity (`#6953f2` purple + `#0c52f9` blue).
+
+**Before** (v1.3):
 ```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                           UPDATE PIPELINE FLOW                               ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────┐ ║
-║    │  CHECK   │───▶│ DOWNLOAD │───▶│ EXTRACT  │───▶│ INSTALL  │───▶│VERIFY│ ║
-║    │ VERSION  │    │ APPIMAGE │    │  FILES   │    │ TO /opt  │    │START │ ║
-║    └────┬─────┘    └────┬─────┘    └────┬─────┘    └────┬─────┘    └──┬───┘ ║
-║         │               │               │               │              │     ║
-║         │ up to date    │ <150MB?       │ missing       │ perm         │fail ║
-║         ▼               ▼   files?      ▼   error?      ▼              ▼     ║
-║    ┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐    ┌───────┐ ║
-║    │ EXIT OK │     │  RETRY  │     │  RETRY  │     │  RETRY  │    │ROLLBCK│ ║
-║    │  ✓ 🐝   │     │ (2x max)│     │ (2x max)│     │ (2x max)│    │RESTORE│ ║
-║    └─────────┘     └─────────┘     └─────────┘     └─────────┘    └───────┘ ║
-║                                                                              ║
-║    ════════════════════════════════════════════════════════════════════════  ║
-║                                                                              ║
-║    📁 CRITICAL FILES VERIFIED:                                               ║
-║    ├── beepertexts              (main binary)                                ║
-║    ├── snapshot_blob.bin        (V8 JavaScript snapshot)                     ║
-║    ├── v8_context_snapshot.bin  (V8 context snapshot)                        ║
-║    └── resources/app/package.json (version source of truth)                  ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+📥 Downloading Beeper 4.2.547...
+   ✓ Download complete (213MB)
+📦 Extracting AppImage...
+   ✓ Extraction complete
+🔍 Verifying extraction...
+✅ Successfully updated to 4.2.547!
 ```
+
+**After** (v1.5):
+```
+  [4/8] Downloading Beeper 4.2.547
+    ✓ Download complete — 213MB
+
+  [5/8] Extracting & verifying
+    ✓ All 3 checks passed (extraction, files, ELF)
+
+  ╭──────────────────────────────────────╮
+  │  ✓ Update complete                   │
+  │  Version   4.2.482 → 4.2.547        │
+  │  Method    Direct install            │
+  │  Duration  52s                       │
+  ╰──────────────────────────────────────╯
+```
+
+- True color palette with 256-color fallback
+- 8 numbered phases replacing 17 emoji headers
+- Collapsible checks (one line when all pass)
+- Output reduced from ~60 to ~25 lines
+
+</details>
 
 ---
 
-## 📦 Installation
+## How It Works
+
+<details>
+<summary><b>Update pipeline flow</b></summary>
+
+```
+  [1/8] Check versions    → Already up to date? Exit.
+           │
+  [2/8] Validate source   → Untrusted domain? Abort.
+           │
+  [3/8] Prerequisites     → sudo, disk, network, permissions
+           │
+  [4/8] Download           → With resume, retries, size check
+           │
+  [5/8] Extract & verify   → Checksum, ELF, critical files
+           │
+  [6/8] Install            → Backup → Patches → Copy → Permissions
+           │
+  [7/8] Configure          → Version verify, Wayland override
+           │
+  [8/8] Verify startup     → Launch test, retry with cache clear
+           │
+       ╭─────────╮
+       │ Summary │ → Success box or rollback
+       ╰─────────╯
+```
+
+**Critical files verified after extraction:**
+
+| File                          | Purpose                    |
+|-------------------------------|----------------------------|
+| `beepertexts`                 | Main Electron binary       |
+| `chrome-sandbox`              | Chromium sandbox (setuid)  |
+| `snapshot_blob.bin`           | V8 JavaScript snapshot     |
+| `v8_context_snapshot.bin`     | V8 context snapshot        |
+| `resources/app/package.json`  | Version source of truth    |
+
+</details>
+
+---
+
+## Installation
 
 ### Option 1: Quick Install (Recommended)
 
@@ -254,13 +249,11 @@ curl -fsSL https://raw.githubusercontent.com/beeper-community/update-beeper/mast
 ### Option 2: Manual Install
 
 ```bash
-# Download scripts
 curl -o ~/.local/bin/update-beeper \
   https://raw.githubusercontent.com/beeper-community/update-beeper/master/update-beeper
 curl -o ~/.local/bin/beeper-version \
   https://raw.githubusercontent.com/beeper-community/update-beeper/master/beeper-version
 
-# Make executable
 chmod +x ~/.local/bin/update-beeper ~/.local/bin/beeper-version
 ```
 
@@ -276,75 +269,49 @@ cd update-beeper
 
 ---
 
-## 🔧 Usage
-
-### Check Version Status
-
-```bash
-beeper-version
-```
-
-```
-╭──────────────────────────────────────╮
-│     🐝 Beeper Version Status         │
-├──────────────────────────────────────┤
-│                                      │
-│   Installed:  4.2.482                │
-│   Latest:     4.2.495                │
-│   AUR:        4.2.455                │
-│                                      │
-│   ⚠ Update available!               │
-│   ℹ AUR is behind by ~40 releases   │
-│                                      │
-╰──────────────────────────────────────╯
-```
-
-### Update Beeper
+## Usage
 
 ```bash
 update-beeper              # Check and install updates
-update-beeper --check      # Check only, don't install
 update-beeper --versions   # Show all versions (installed, latest, AUR)
-update-beeper --changelog  # Open changelog for installed version
+update-beeper --dry-run    # Preview what would happen
 update-beeper --force      # Force reinstall even if up to date
-update-beeper --notify     # Send desktop notification (for automation)
-update-beeper --quiet      # Silent mode (for cron/systemd)
-update-beeper --rollback   # Manually rollback to previous version
+update-beeper --rollback   # Rollback to previous version
+update-beeper --history    # Show past update attempts
 ```
 
 ### Command Reference
 
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--check` | `-c` | Check for updates without installing |
-| `--changelog` | `-l` | Show changelog for installed version |
-| `--notify` | `-n` | Send desktop notification (for cron/timer use) |
-| `--force` | `-f` | Force update even if already on latest |
-| `--quiet` | `-q` | Quiet mode - only output on errors |
-| `--versions` | | Show all version info (installed, latest, AUR) |
-| `--rollback` | `-r` | Rollback to previous backup version |
-| `--version` | `-v` | Show script version |
-| `--help` | `-h` | Show help message |
+| Option            | Short | Description                                      |
+|-------------------|-------|--------------------------------------------------|
+| `--check`         | `-c`  | Check for updates without installing              |
+| `--changelog`     | `-l`  | Show changelog for installed version              |
+| `--notify`        | `-n`  | Send desktop notification (for cron/timer use)    |
+| `--force`         | `-f`  | Force update even if already on latest            |
+| `--quiet`         | `-q`  | Quiet mode — only output on errors                |
+| `--versions`      |       | Show all version info (installed, latest, AUR)    |
+| `--skip-checksum` |       | Skip SHA256 checksum verification                 |
+| `--dry-run`       |       | Show what would happen without making changes     |
+| `--history`       |       | Show update history with timestamps               |
+| `--rollback`      | `-r`  | Rollback to previous backup version               |
+| `--version`       | `-v`  | Show script version                               |
+| `--help`          | `-h`  | Show help message                                 |
 
 ---
 
-## ⏰ Automatic Updates
+## Automatic Updates
 
 ### Systemd Timer (Set & Forget)
 
 ```bash
-# Copy systemd user files
 mkdir -p ~/.config/systemd/user
 curl -fsSL https://raw.githubusercontent.com/beeper-community/update-beeper/master/systemd/update-beeper-user.service \
   -o ~/.config/systemd/user/update-beeper.service
 curl -fsSL https://raw.githubusercontent.com/beeper-community/update-beeper/master/systemd/update-beeper-user.timer \
   -o ~/.config/systemd/user/update-beeper.timer
 
-# Enable the timer
 systemctl --user daemon-reload
 systemctl --user enable --now update-beeper.timer
-
-# Check timer status
 systemctl --user list-timers update-beeper.timer
 ```
 
@@ -352,21 +319,7 @@ systemctl --user list-timers update-beeper.timer
 
 ---
 
-## 🗣️ Natural Language Commands
-
-```
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│       "Update Beeper"              ───▶      🐝 Updating...                │
-│       "Is Beeper up to date?"      ───▶      🐝 Checking...                │
-│       "Beeper version"             ───▶      🐝 v4.2.495                   │
-│       "Rollback Beeper"            ───▶      🐝 Restoring...               │
-│                                                                             │
-│                    Talk to your updater like a human!                       │
-│               Works with Claude Code, Bash aliases, or Jarvis               │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-```
+## Natural Language Commands
 
 <details>
 <summary><b>Shell Aliases (Bash/Zsh)</b></summary>
@@ -374,11 +327,9 @@ systemctl --user list-timers update-beeper.timer
 Add to your `~/.bashrc` or `~/.zshrc`:
 
 ```bash
-# Quick shortcuts
 alias bu='update-beeper'
 alias bv='beeper-version'
 
-# Natural language wrapper
 beeper() {
     case "$1" in
         update|upgrade) shift; update-beeper "$@" ;;
@@ -396,16 +347,13 @@ Then use: `bu`, `bv`, `beeper update`, `beeper version`
 <summary><b>Jarvis Wrapper (Natural Language CLI)</b></summary>
 
 ```bash
-# Install the NL wrapper
 curl -o ~/bin/jarvis-beeper \
   https://raw.githubusercontent.com/beeper-community/update-beeper/master/jarvis-beeper
 chmod +x ~/bin/jarvis-beeper
 
-# Use natural language!
 jarvis-beeper "update beeper"
 jarvis-beeper "is beeper up to date"
 jarvis-beeper "what version of beeper do I have"
-jarvis-beeper "rollback beeper"
 ```
 
 </details>
@@ -423,42 +371,18 @@ The update-beeper skill auto-activates when you say things like:
 
 ---
 
-## 🏥 Health Monitoring
-
-```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                          BEEPER HEALTH MONITOR                               ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║   Fixes the dreaded "blank screen after sleep" bug automatically!            ║
-║                                                                              ║
-║   Every 5 minutes:                                                           ║
-║                                                                              ║
-║   ┌─────────────┐         ┌─────────────┐         ┌─────────────┐           ║
-║   │   Process   │  ──▶    │   Window    │  ──▶    │   Status    │           ║
-║   │   Running?  │         │   Visible?  │         │             │           ║
-║   └──────┬──────┘         └──────┬──────┘         └─────────────┘           ║
-║          │                       │                                           ║
-║          │ NO                    │ NO (blank!)                               ║
-║          ▼                       ▼                                           ║
-║   ┌─────────────┐         ┌─────────────────────────┐                       ║
-║   │   Log: not  │         │   Auto-restart with     │                       ║
-║   │   running   │         │   XWayland fallback     │                       ║
-║   └─────────────┘         └─────────────────────────┘                       ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-```
+## Health Monitoring
 
 <details>
-<summary><b>Install Health Monitor</b></summary>
+<summary><b>Auto-restart on blank screen</b></summary>
+
+Fixes the dreaded "blank screen after sleep" bug automatically. A systemd timer checks every 5 minutes whether Beeper's window is visible and restarts it with XWayland fallback if needed.
 
 ```bash
-# Download the health check script
 curl -o ~/bin/beeper-health \
   https://raw.githubusercontent.com/beeper-community/update-beeper/master/beeper-health
 chmod +x ~/bin/beeper-health
 
-# Install systemd timer (runs every 5 minutes)
 mkdir -p ~/.config/systemd/user
 
 cat > ~/.config/systemd/user/beeper-health.service << 'EOF'
@@ -492,7 +416,7 @@ Logs are written to `/tmp/beeper-health.log` when issues are detected.
 
 ---
 
-## 🖥️ Wayland Support
+## Wayland Support
 
 Beeper uses Electron, which can have rendering issues on Wayland. **Blank/white windows** are common when Electron tries to use XWayland.
 
@@ -501,12 +425,10 @@ Beeper uses Electron, which can have rendering issues on Wayland. **Blank/white 
 
 When running on Wayland (detected via `$WAYLAND_DISPLAY`), this script automatically:
 
-1. **Tests startup with Wayland flags** - Uses `--enable-features=UseOzonePlatform --ozone-platform=wayland --disable-gpu-compositing`
-2. **Creates desktop file override** - Installs to `~/.local/share/applications/beeper.desktop`
+1. **Tests startup with Wayland flags** — `--enable-features=UseOzonePlatform --ozone-platform=wayland --disable-gpu-compositing`
+2. **Creates desktop file override** — Installs to `~/.local/share/applications/beeper.desktop`
 
-This fixes:
-- Blank/white windows on startup
-- Blank screen after sleep/wake/screensaver cycles
+This fixes blank/white windows on startup and after sleep/wake cycles.
 
 </details>
 
@@ -525,72 +447,85 @@ This reinstalls and configures Wayland support.
 
 ---
 
-## 🔧 Self-Healing Pipeline
+## Self-Healing Pipeline
 
 <details>
 <summary><b>What Gets Verified</b></summary>
 
-| File | Purpose |
-|------|---------|
-| `beepertexts` | Main Electron binary |
-| `snapshot_blob.bin` | V8 JavaScript snapshot |
-| `v8_context_snapshot.bin` | V8 context snapshot |
-| `resources/app/package.json` | Version source of truth |
+| Check                | Purpose                              |
+|----------------------|--------------------------------------|
+| Critical files       | beepertexts, snapshots, package.json |
+| ELF binary type      | Validates real Linux executable      |
+| SHA256 checksum      | Detects corrupted/tampered downloads |
+| File permissions     | Correct ownership and setuid bits    |
+| Disk space           | 1200MB available before install      |
+| Domain validation    | Downloads only from trusted domains  |
+| Installed version    | Confirms version matches expected    |
+| Startup test         | Beeper actually launches             |
 
 </details>
 
 <details>
 <summary><b>Self-Healing Actions</b></summary>
 
-| Failure | Diagnosis | Fix Applied |
-|---------|-----------|-------------|
-| Download too small | Incomplete transfer | Clear temp, wait 2s, retry |
-| Missing critical files | Extraction failed | Clear squashfs-root, re-extract |
-| Wrong version | Stale download | Clear temp, fresh download |
-| Startup crash | Corrupted cache | Clear Electron cache dirs |
-| All retries exhausted | Unrecoverable | **Automatic rollback** |
+| Failure              | Diagnosis               | Fix Applied                       |
+|----------------------|-------------------------|-----------------------------------|
+| Download too small   | Incomplete transfer     | Clear temp, wait 2s, retry        |
+| Missing critical files | Extraction failed     | Clear squashfs-root, re-extract   |
+| Non-ELF binary       | Corrupted extraction    | Clear temp, re-download           |
+| Wrong version        | Stale download          | Clear temp, fresh download        |
+| Permission errors    | Wrong ownership         | Recursive chown/chmod fix         |
+| Low disk space       | < 1200MB available      | Clear caches, warn user           |
+| Startup crash        | Corrupted cache         | Clear Electron cache dirs         |
+| All retries exhausted| Unrecoverable           | **Automatic rollback**            |
 
 </details>
 
 <details>
 <summary><b>Code Safety Practices</b></summary>
 
-| Practice | Implementation |
-|----------|----------------|
-| **No directory leaks** | All `cd` commands run in subshells |
-| **Safe file operations** | All paths quoted, absolute references |
-| **Proper error handling** | 46+ commands protected |
-| **Clean exit** | Trap ensures temp cleanup |
-| **Idempotent operations** | Safe to run multiple times |
+| Practice                 | Implementation                              |
+|--------------------------|---------------------------------------------|
+| No directory leaks       | All `cd` commands run in subshells          |
+| Safe file operations     | All paths quoted, absolute references        |
+| Proper error handling    | 46+ commands protected with failure guards   |
+| Clean exit               | Trap ensures temp cleanup                    |
+| Idempotent operations    | Safe to run multiple times                   |
+| Structured logging       | Events logged to persistent file             |
+| Domain validation        | Downloads only from trusted Beeper domains   |
+| ELF verification         | Binary type checked after extraction         |
 
 </details>
 
 ---
 
-## 📋 Requirements
+## Requirements
 
-| Requirement | Notes |
-|-------------|-------|
-| **Architecture** | x86_64 only (Beeper doesn't provide ARM builds) |
-| **Distro** | Arch Linux or Arch-based (Manjaro, EndeavourOS, etc.) |
-| **curl** | Required - for downloading |
-| **sudo** | Required - for installing to /opt |
-| **notify-send** | Optional - for desktop notifications |
-
----
-
-## 📁 File Locations
-
-```
-/opt/beeper/              ← Installation directory
-/opt/beeper-backups/      ← Rolling backups (last 3 versions)
-~/.config/BeeperTexts/    ← User config + Electron caches
-/tmp/beeper-update/       ← Temporary download/extract dir
-```
+| Requirement      | Notes                                                  |
+|------------------|--------------------------------------------------------|
+| **Architecture** | x86_64 only (Beeper doesn't provide ARM builds)       |
+| **Distro**       | Arch Linux or Arch-based (Manjaro, EndeavourOS, etc.)  |
+| **curl**         | Required — for downloading                             |
+| **sudo**         | Required — for installing to /opt                      |
+| **notify-send**  | Optional — for desktop notifications                   |
 
 ---
 
-## ❓ FAQ
+## File Locations
+
+```
+/opt/beeper/                                         ← Installation directory
+/opt/beeper-backups/                                 ← Rolling backups (last 3 versions)
+~/.config/BeeperTexts/                               ← User config + Electron caches
+~/.local/share/update-beeper/update-beeper.log       ← Structured event log
+~/.local/share/update-beeper/history.txt             ← Update history
+~/.cache/update-beeper/checksums.txt                 ← SHA256 checksum cache
+/tmp/beeper-update/                                  ← Temporary download/extract dir
+```
+
+---
+
+## FAQ
 
 <details>
 <summary><b>Should I still use the AUR package?</b></summary>
@@ -602,7 +537,7 @@ Yes! This script works alongside the AUR package. When AUR catches up, you can r
 <details>
 <summary><b>What if an update breaks something?</b></summary>
 
-The script automatically rolls back to your previous working version. You'll get a notification and can try again later.
+The script automatically rolls back to your previous working version. You can also manually rollback with `update-beeper --rollback`.
 
 </details>
 
@@ -639,23 +574,19 @@ Fixed by the `--disable-gpu-compositing` flag, included automatically. Run `upda
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-## 📜 Changelog
+## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
-## 📄 License
+## License
 
 MIT
 
 ---
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/beeper-community/update-beeper/master/.github/assets/bee-divider.png" alt="divider" width="400">
-</p>
 
 <p align="center">
   <sub>Made with 🐝 for the Beeper community</sub><br>

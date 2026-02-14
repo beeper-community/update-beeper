@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-02-14
+
+### Added
+
+- **Beeper-branded true color palette** — Purple `#6953f2`, blue `#0c52f9`, muted emerald, soft red, warm amber, lavender-gray, light purple
+- **256-color terminal fallback** — Automatic `$COLORTERM` detection degrades gracefully on older terminals
+- **5-level typography hierarchy** — Phase headers, pass/fail/warn sub-steps, info text, action indicators, hints
+- **8 numbered phases** `[n/8]` — Consolidated from 17 emoji-headed micro-phases into coherent steps
+- **Collapsible check groups** — One-line summary when all checks pass, expands only on failure
+- **Unicode summary box** — `╭╮╰╯│─` bordered completion panel with version, method, duration, retries
+- **Branded dry-run box** — Labeled info panel matching the summary box style
+
+### Changed
+
+- Output reduced from ~60 lines to ~25 on success, 5 when already up-to-date
+- All emoji removed from functional output (only `🐝` in header banner)
+- All output flows through 7 helper functions (`pass`/`fail`/`warn`/`detail`/`action`/`hint`/`phase`)
+- Dynamic step counter: 4 steps for AUR path, 8 for direct install
+
+### Removed
+
+- Generic ANSI color scheme (`RED`/`GREEN`/`YELLOW`/`CYAN` variables)
+- All emoji from phase headers (`📥📦💾🔍🚀🔧🔐🖥️⚡🧪📋`)
+- Backward compatibility color aliases
+
+## [1.4.0] - 2026-02-14
+
+### Added
+
+- **`--dry-run` flag** — Preview what would happen without making changes
+- **`--history` flag** — View past update attempts with timestamps and outcomes
+- **Structured logging** — All events logged to `~/.local/share/update-beeper/update-beeper.log`
+- **Update history file** — Persistent record at `~/.local/share/update-beeper/history.txt`
+- **ELF binary verification** — Validates extracted binary is a real Linux ELF executable
+- **Download resume** — `curl -C -` resumes interrupted downloads instead of restarting
+- **Disk space pre-check** — Verifies 1200MB available on `/opt` before install
+- **URL domain validation** — Verifies downloads come from trusted Beeper domains only
+- **Install step failure guards** — `apply_patches`, `backup_current`, `install_files` abort on failure
+
+### Changed
+
+- **Single Beeper API call** — Combined two separate curl requests into one
+- **AUR JSON RPC API** — Replaced fragile HTML scraping with `aur.archlinux.org/rpc/v5/info` endpoint
+- **Dynamic update reasons** — `perform_update()` tracks why direct install was chosen
+
+### Security
+
+| Protection | Attack Vector | Mitigation |
+|------------|---------------|------------|
+| Domain validation | MITM redirect to malicious download | Whitelist trusted domains |
+| ELF verification | Corrupted/trojanized binary | Validate file magic bytes |
+| Install guards | Partial install on failure | Abort and rollback on any step failure |
+
 ## [1.3.0] - 2026-02-02
 
 ### Added
