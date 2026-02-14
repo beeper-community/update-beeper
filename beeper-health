@@ -1,10 +1,31 @@
 #!/bin/bash
 # beeper-health - Monitor Beeper and restart if unresponsive
 
+set -e
+
+# Colors for terminal output
+RED='\033[0;31m'
+NC='\033[0m'
+
 BEEPER_WAYLAND=~/bin/beeper-wayland
 LOG_FILE=/tmp/beeper-health.log
 
+# Ensure log directory exists
+mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+
 check_beeper_responsive() {
+    # Check if hyprctl is available (Hyprland-specific)
+    if ! command -v hyprctl &>/dev/null; then
+        echo -e "${RED}Error: hyprctl not found. This script requires Hyprland.${NC}" >&2
+        return 1
+    fi
+
+    # Check if jq is available
+    if ! command -v jq &>/dev/null; then
+        echo -e "${RED}Error: jq not found. Install with: sudo pacman -S jq${NC}" >&2
+        return 1
+    fi
+
     # Check if Beeper window exists and is mapped
     if ! hyprctl clients -j | jq -e '.[] | select(.class | test("eeper"; "i"))' > /dev/null 2>&1; then
         return 1  # No window found
@@ -14,7 +35,14 @@ check_beeper_responsive() {
 
 restart_beeper() {
     echo "[$(date)] Restarting Beeper with XWayland mode..." >> "$LOG_FILE"
-    killall -9 beepertexts 2>/dev/null
+
+    # Verify restart script exists
+    if [[ ! -x "$BEEPER_WAYLAND" ]]; then
+        echo "[$(date)] Error: $BEEPER_WAYLAND not found or not executable" >> "$LOG_FILE"
+        return 1
+    fi
+
+    killall -9 beepertexts 2>/dev/null || true
     sleep 2
     nohup "$BEEPER_WAYLAND" > /dev/null 2>&1 &
 }

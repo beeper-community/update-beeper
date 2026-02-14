@@ -1,0 +1,57 @@
+name: Generate Checksums
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'update-beeper'
+      - 'beeper-version'
+      - 'beeper-health'
+      - 'install.sh'
+  release:
+    types: [published]
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  generate-checksums:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate SHA256 checksums
+        run: |
+          # Generate checksums for all scripts
+          sha256sum update-beeper beeper-version beeper-health install.sh > checksums.sha256.tmp
+
+          # Create checksums file with header
+          cat > checksums.sha256 << 'EOF'
+          # SHA256 checksums for update-beeper scripts
+          # Verify with: sha256sum -c checksums.sha256
+          # Or for specific files: sha256sum -c checksums.sha256 --ignore-missing
+          #
+          # Generated automatically by GitHub Actions on each release
+          # Manual generation: sha256sum update-beeper beeper-version beeper-health install.sh > checksums.sha256
+
+          EOF
+
+          # Append the actual checksums
+          cat checksums.sha256.tmp >> checksums.sha256
+          rm checksums.sha256.tmp
+
+          echo "Generated checksums:"
+          cat checksums.sha256
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add checksums.sha256
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: Update checksums.sha256"
+            git push
+          fi
