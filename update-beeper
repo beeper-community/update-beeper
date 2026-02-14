@@ -298,6 +298,12 @@ check_versions() {
             AUR="unknown"
         fi
     fi
+
+    # Check if beeper is tracked by pacman (affects AUR update path)
+    PACMAN_TRACKED=false
+    if pacman -Q beeper-v4-bin &>/dev/null; then
+        PACMAN_TRACKED=true
+    fi
 }
 
 #──────────────────────────────────────────────────────────────────────────────
@@ -336,6 +342,11 @@ show_versions() {
     echo -e "  Installed:  ${GREEN}${INSTALLED:-unknown}${NC}"
     echo -e "  Latest:     ${CYAN}${LATEST:-unknown}${NC}"
     echo -e "  AUR:        ${DIM}${AUR:-unknown}${NC}"
+    if [[ "$PACMAN_TRACKED" == true ]]; then
+        echo -e "  Pacman:     ${GREEN}tracked${NC}"
+    else
+        echo -e "  Pacman:     ${YELLOW}untracked${NC}"
+    fi
     echo ""
 
     if [[ -n "$INSTALLED" ]] && [[ "$INSTALLED" != "unknown" ]] && \
@@ -789,11 +800,13 @@ rollback_to_backup() {
     if verify_beeper_starts; then
         echo -e "${GREEN}✅ Rollback successful!${NC}"
 
-        # Update desktop file to reflect rolled-back version
+        # Update desktop file to reflect rolled-back version (may not exist after direct installs)
         local rollback_version
         rollback_version=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$INSTALL_DIR/resources/app/package.json" | head -1)
-        sudo sed -i "s/X-AppImage-Version=.*/X-AppImage-Version=$rollback_version/" \
-            /usr/share/applications/beeper.desktop
+        if [[ -f /usr/share/applications/beeper.desktop ]]; then
+            sudo sed -i "s/X-AppImage-Version=.*/X-AppImage-Version=$rollback_version/" \
+                /usr/share/applications/beeper.desktop
+        fi
 
         return 0
     else
@@ -873,9 +886,11 @@ install_files() {
         fi
     fi
 
-    # Update desktop file version
-    sudo sed -i "s/X-AppImage-Version=.*/X-AppImage-Version=$LATEST/" \
-        /usr/share/applications/beeper.desktop
+    # Update desktop file version (may not exist after direct installs)
+    if [[ -f /usr/share/applications/beeper.desktop ]]; then
+        sudo sed -i "s/X-AppImage-Version=.*/X-AppImage-Version=$LATEST/" \
+            /usr/share/applications/beeper.desktop
+    fi
 
     echo -e "${GREEN}   ✓ Files installed with correct permissions${NC}"
     return 0
@@ -1133,6 +1148,11 @@ check_versions
 log "   Installed: ${INSTALLED:-unknown}"
 log "   Latest:    ${LATEST:-unknown}"
 log "   AUR:       ${AUR:-unknown}"
+if [[ "$PACMAN_TRACKED" == true ]]; then
+    log "   Pacman:    ${GREEN}tracked${NC}"
+else
+    log "   Pacman:    ${YELLOW}untracked (--overwrite will be used)${NC}"
+fi
 
 # Validate we got version info
 if [[ -z "$LATEST" || "$LATEST" == "unknown" ]]; then
@@ -1196,7 +1216,7 @@ fi
 # Try AUR first if it has the latest
 if version_gte "$AUR" "$LATEST"; then
     echo -e "${BLUE}📦 Updating via yay...${NC}"
-    if yay -Syu --noconfirm beeper-v4-bin; then
+    if yay -S --noconfirm --overwrite '/opt/beeper/*' beeper-v4-bin; then
         echo -e "${GREEN}✅ Updated to $LATEST via AUR!${NC}"
 
         # Set up Wayland desktop override
