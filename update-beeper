@@ -4,7 +4,7 @@
 
 set -e
 
-SCRIPT_VERSION="1.3.0"
+SCRIPT_VERSION="1.4.0"
 LOCKFILE="/tmp/update-beeper.lock"
 BEEPER_API="https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop"
 CHANGELOG_URL="https://www.beeper.com/changelog/desktop"
@@ -23,6 +23,10 @@ MIN_APPIMAGE_SIZE=150000000  # 150MB
 
 # Checksum cache for trust-on-first-run verification
 CHECKSUM_CACHE="$HOME/.cache/update-beeper/checksums.txt"
+
+# Persistent log and update history
+LOG_FILE="$HOME/.local/share/update-beeper/update-beeper.log"
+HISTORY_FILE="$HOME/.local/share/update-beeper/update-history.log"
 
 # Minimum required free space (500MB for download + extraction + buffer)
 MIN_FREE_SPACE_MB=500
@@ -51,6 +55,7 @@ DO_ROLLBACK=false
 SCRIPT_EXIT_CODE=0
 SHOW_VERSIONS=false
 SKIP_CHECKSUM=false
+DRY_RUN=false
 
 # Track which backup to use for rollback
 ROLLBACK_BACKUP=""
@@ -66,6 +71,8 @@ usage() {
     echo "  --quiet, -q       Quiet mode - only output on errors (for cron/systemd)"
     echo "  --versions        Show all version info (installed, latest, AUR)"
     echo "  --skip-checksum   Skip SHA256 checksum verification (for forced re-downloads)"
+    echo "  --dry-run         Show what would happen without making changes"
+    echo "  --history         Show update history"
     echo "  --rollback, -r    Rollback to previous backup version"
     echo "  --version, -v     Show script version"
     echo "  --help, -h        Show this help message"
@@ -95,6 +102,8 @@ while [[ $# -gt 0 ]]; do
         --quiet|-q) QUIET=true; shift ;;
         --versions) SHOW_VERSIONS=true; shift ;;
         --skip-checksum) SKIP_CHECKSUM=true; shift ;;
+        --dry-run) DRY_RUN=true; shift ;;
+        --history) cat "$HISTORY_FILE" 2>/dev/null || echo "No update history yet."; exit 0 ;;
         --rollback|-r) DO_ROLLBACK=true; shift ;;
         --version|-v) show_version ;;
         --help|-h) usage ;;
@@ -103,6 +112,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 cleanup() {
+    sudo_keepalive_stop
     rm -rf "$TMP_DIR" 2>/dev/null || true
     release_lock
 }
@@ -141,6 +151,41 @@ log() {
 # Always print (errors)
 log_error() {
     echo -e "$@" >&2
+}
+
+# Persistent log file (fire-and-forget, never fails the script)
+log_event() {
+    mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+# Record update in history file
+record_update_history() {
+    local from_version="$1"
+    local to_version="$2"
+    local method="$3"    # "aur" or "direct"
+    local status="$4"    # "success" or "failed" or "rolled-back"
+    mkdir -p "$(dirname "$HISTORY_FILE")" 2>/dev/null || true
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $from_version → $to_version ($method) [$status]" >> "$HISTORY_FILE" 2>/dev/null || true
+}
+
+#──────────────────────────────────────────────────────────────────────────────
+# SUDO KEEPALIVE (prevents timeout during long downloads)
+#──────────────────────────────────────────────────────────────────────────────
+
+SUDO_KEEPALIVE_PID=""
+
+sudo_keepalive_start() {
+    ( while true; do sudo -v 2>/dev/null; sleep 50; done ) &
+    SUDO_KEEPALIVE_PID=$!
+}
+
+sudo_keepalive_stop() {
+    if [[ -n "${SUDO_KEEPALIVE_PID}" ]]; then
+        kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+        wait "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+        SUDO_KEEPALIVE_PID=""
+    fi
 }
 
 #──────────────────────────────────────────────────────────────────────────────
@@ -260,18 +305,19 @@ check_versions() {
         INSTALLED=$(pacman -Q beeper-v4-bin 2>/dev/null | awk '{print $2}' | cut -d'-' -f1)
     fi
 
-    # Get latest version from API (with 10s timeout to prevent hanging)
+    # Get latest version from API (SINGLE curl call for both status + URL)
     # Sets globals: DOWNLOAD_URL, LATEST, AUR
-
-    # First check HTTP status code to detect server errors
+    local api_response
+    api_response=$(curl -Ls -m 10 -o /dev/null -w "%{http_code}\n%{url_effective}" "$BEEPER_API" 2>/dev/null)
     local http_status
-    http_status=$(curl -Ls -m 10 -o /dev/null -w "%{http_code}" "$BEEPER_API" 2>/dev/null)
+    http_status=$(echo "$api_response" | head -1)
+    DOWNLOAD_URL=$(echo "$api_response" | tail -1)
+
     if [[ "$http_status" != "200" ]] && [[ "$http_status" != "302" ]] && [[ "$http_status" != "301" ]]; then
         echo -e "${RED}   ✗ Beeper API returned HTTP $http_status${NC}" >&2
         LATEST="unknown"
         DOWNLOAD_URL=""
     else
-        DOWNLOAD_URL=$(curl -Ls -m 10 -o /dev/null -w "%{url_effective}" "$BEEPER_API" 2>/dev/null)
         LATEST=$(echo "$DOWNLOAD_URL" | grep -oP 'Beeper-\K[0-9]+\.[0-9]+\.[0-9]+')
 
         # Validate LATEST extraction - if empty, API redirect may have failed
@@ -284,19 +330,17 @@ check_versions() {
         fi
     fi
 
-    # Get AUR version (with 10s timeout, using POSIX-compliant [0-9] instead of \d)
-    # First check HTTP status
-    local aur_http_status
-    aur_http_status=$(curl -sL -m 10 -o /dev/null -w "%{http_code}" "https://aur.archlinux.org/packages/beeper-v4-bin" 2>/dev/null)
-    if [[ "$aur_http_status" != "200" ]]; then
-        echo -e "${YELLOW}   ⚠ AUR returned HTTP $aur_http_status${NC}" >&2
-        AUR="unknown"
-    else
-        AUR=$(curl -sL -m 10 "https://aur.archlinux.org/packages/beeper-v4-bin" 2>/dev/null | \
-              grep -oP '4\.[0-9]+\.[0-9]+' | head -1)
+    # Get AUR version via JSON RPC API (structured, no HTML scraping)
+    local aur_json
+    aur_json=$(curl -sL -m 10 "https://aur.archlinux.org/rpc/v5/info?arg[]=beeper-v4-bin" 2>/dev/null)
+    if [[ -n "$aur_json" ]] && echo "$aur_json" | grep -q '"resultcount":1'; then
+        AUR=$(echo "$aur_json" | grep -oP '"Version"\s*:\s*"\K[0-9]+\.[0-9]+\.[0-9]+')
         if [[ -z "$AUR" ]]; then
             AUR="unknown"
         fi
+    else
+        echo -e "${YELLOW}   ⚠ AUR RPC returned no results${NC}" >&2
+        AUR="unknown"
     fi
 
     # Check if beeper is tracked by pacman (affects AUR update path)
@@ -590,6 +634,27 @@ verify_extraction() {
     done
     echo -e "${GREEN}   ✓ All critical files present${NC}"
     return 0
+}
+
+verify_binary_type() {
+    local binary="$1"
+
+    if ! command -v file &>/dev/null; then
+        echo -e "${YELLOW}   ⚠ 'file' command not found, skipping binary type check${NC}"
+        return 0
+    fi
+
+    local file_type
+    file_type=$(file -b "$binary" 2>/dev/null)
+
+    if echo "$file_type" | grep -q "ELF.*executable\|ELF.*shared object"; then
+        echo -e "${GREEN}   ✓ Binary verified: ELF executable${NC}"
+        return 0
+    else
+        echo -e "${RED}   ✗ Unexpected binary type: $file_type${NC}"
+        echo -e "${RED}     Expected ELF executable, got something else.${NC}"
+        return 1
+    fi
 }
 
 verify_installed_version() {
@@ -940,11 +1005,21 @@ do_direct_install() {
 
     mkdir -p "$TMP_DIR"
 
+    # Start sudo keepalive (prevents timeout during long downloads/installs)
+    sudo_keepalive_start
+
     #── Step 0: Check disk space ──────────────────────────────────────────────
     echo -e "${BLUE}💾 Checking disk space...${NC}"
     if ! verify_disk_space "/tmp" "$MIN_FREE_SPACE_MB"; then
         echo -e "${RED}❌ Not enough space in /tmp for download and extraction${NC}"
         echo -e "${YELLOW}   Try: sudo rm -rf /tmp/beeper-update${NC}"
+        return 1
+    fi
+
+    # Also check /opt where backup + new install will live (~1200MB needed)
+    if ! verify_disk_space "/opt" 1200; then
+        echo -e "${RED}❌ Not enough space in /opt for backup + installation${NC}"
+        echo -e "${YELLOW}   Free up space or remove old backups: sudo rm -rf /opt/beeper-backups/*${NC}"
         return 1
     fi
 
@@ -955,9 +1030,9 @@ do_direct_install() {
         #── Step 1: Download ──────────────────────────────────────────────────
         echo -e "${BLUE}📥 Downloading... (attempt $download_attempt/$MAX_DOWNLOAD_RETRIES)${NC}"
 
-        # Use -f to fail on HTTP errors (4xx, 5xx), capture HTTP status for better error reporting
+        # Use -f to fail on HTTP errors, -C - for resume support, capture HTTP status
         local download_http_code
-        download_http_code=$(curl -L -f --progress-bar -w "%{http_code}" -o "$TMP_DIR/$appimage" "$DOWNLOAD_URL" 2>/dev/null) || true
+        download_http_code=$(curl -L -f -C - --progress-bar -w "%{http_code}" -o "$TMP_DIR/$appimage" "$DOWNLOAD_URL" 2>/dev/null) || true
 
         # Check if download failed
         if [[ ! -f "$TMP_DIR/$appimage" ]] || [[ ! -s "$TMP_DIR/$appimage" ]]; then
@@ -1018,6 +1093,13 @@ do_direct_install() {
         done
 
         if [[ "$extraction_success" == true ]]; then
+            # Verify the main binary is a real ELF executable (not corrupted/truncated)
+            if ! verify_binary_type "$extract_dir/beepertexts"; then
+                echo -e "${RED}   ✗ Binary verification failed - file may be corrupted${NC}"
+                extraction_success=false
+                fix_and_retry "download" $download_attempt
+                continue
+            fi
             break  # Success! Exit download loop
         fi
 
@@ -1033,15 +1115,24 @@ do_direct_install() {
     fi
 
     #── Step 4: Apply patches ─────────────────────────────────────────────────
-    apply_patches "$extract_dir"
+    if ! apply_patches "$extract_dir"; then
+        echo -e "${RED}   ✗ Patch application failed${NC}"
+        return 1
+    fi
 
     #── Step 5: Backup current installation ───────────────────────────────────
     echo -e "${BLUE}💾 Backing up current version...${NC}"
-    backup_current
+    if ! backup_current; then
+        echo -e "${RED}   ✗ Backup failed - aborting to protect current installation${NC}"
+        return 1
+    fi
 
     #── Step 6: Install files ─────────────────────────────────────────────────
     echo -e "${BLUE}📁 Installing new version...${NC}"
-    install_files "$extract_dir"
+    if ! install_files "$extract_dir"; then
+        echo -e "${RED}   ✗ Installation failed${NC}"
+        return 1
+    fi
 
     #── Step 7: Verify installed version ──────────────────────────────────────
     echo -e "${BLUE}🔍 Verifying installation...${NC}"
@@ -1079,13 +1170,32 @@ do_direct_install() {
 }
 
 perform_update() {
-    echo -e "${YELLOW}⚡ AUR is behind ($AUR). Installing directly...${NC}"
+    local reason="${1:-direct install}"
+
+    # Dynamic message based on why we're doing a direct install
+    case "$reason" in
+        aur-behind)
+            echo -e "${YELLOW}⚡ AUR is behind ($AUR vs $LATEST). Installing directly...${NC}" ;;
+        aur-unknown)
+            echo -e "${YELLOW}⚡ AUR version unknown. Installing directly...${NC}" ;;
+        aur-failed)
+            echo -e "${YELLOW}⚡ AUR install failed. Falling back to direct install...${NC}" ;;
+        *)
+            echo -e "${YELLOW}⚡ Installing directly...${NC}" ;;
+    esac
     echo ""
+
+    log_event "UPDATE_START from=${INSTALLED:-unknown} to=$LATEST method=direct reason=$reason"
 
     if do_direct_install; then
         echo ""
         echo -e "${GREEN}✅ Successfully updated to $LATEST!${NC}"
-        echo -e "${YELLOW}⚠️  Note: Run 'yay -Syu beeper-v4-bin' when AUR catches up to resync.${NC}"
+        if [[ "$reason" != "aur-failed" ]]; then
+            echo -e "${YELLOW}⚠️  Note: Run 'yay -Syu beeper-v4-bin' when AUR catches up to resync.${NC}"
+        fi
+
+        log_event "UPDATE_SUCCESS version=$LATEST method=direct"
+        record_update_history "${INSTALLED:-unknown}" "$LATEST" "direct" "success"
 
         if [[ "$NOTIFY" == true ]]; then
             send_notification "Updated to $LATEST"
@@ -1095,12 +1205,17 @@ perform_update() {
         echo ""
         echo -e "${RED}❌ Update failed!${NC}"
 
+        log_event "UPDATE_FAILED to=$LATEST method=direct"
+
         if rollback_to_backup; then
             echo -e "${GREEN}Previous version restored.${NC}"
+            log_event "ROLLBACK_SUCCESS"
+            record_update_history "${INSTALLED:-unknown}" "$LATEST" "direct" "rolled-back"
             if [[ "$NOTIFY" == true ]]; then
                 send_notification "Update to $LATEST failed - rolled back"
             fi
         else
+            record_update_history "${INSTALLED:-unknown}" "$LATEST" "direct" "failed"
             if [[ "$NOTIFY" == true ]]; then
                 send_notification "Update to $LATEST failed - rollback also failed!"
             fi
@@ -1142,6 +1257,8 @@ if [[ "$DO_ROLLBACK" == true ]]; then
     fi
 fi
 
+log_event "SESSION_START version=$SCRIPT_VERSION"
+
 log "${BLUE}🔍 Checking versions...${NC}"
 check_versions
 
@@ -1154,19 +1271,29 @@ else
     log "   Pacman:    ${YELLOW}untracked (--overwrite will be used)${NC}"
 fi
 
+log_event "VERSIONS installed=${INSTALLED:-unknown} latest=${LATEST:-unknown} aur=${AUR:-unknown} pacman=$PACMAN_TRACKED"
+
 # Validate we got version info
 if [[ -z "$LATEST" || "$LATEST" == "unknown" ]]; then
     echo -e "${RED}❌ Could not determine latest version from Beeper API${NC}"
+    log_event "ABORT reason=latest_version_unknown"
     exit 1
 fi
 
 # Validate download URL is from trusted domain (security check)
-log "${BLUE}🔒 Validating download source...${NC}"
-validate_download_url "$DOWNLOAD_URL"
+if [[ -n "$DOWNLOAD_URL" ]]; then
+    log "${BLUE}🔒 Validating download source...${NC}"
+    validate_download_url "$DOWNLOAD_URL"
+else
+    echo -e "${RED}❌ No download URL resolved from Beeper API${NC}"
+    log_event "ABORT reason=no_download_url"
+    exit 1
+fi
 
 # Compare versions
 if [[ "$FORCE" != true ]] && version_gte "$INSTALLED" "$LATEST"; then
     log "${GREEN}✅ You're on the latest version!${NC}"
+    log_event "UP_TO_DATE version=$INSTALLED"
     exit 0
 fi
 
@@ -1179,6 +1306,29 @@ if [[ "$CHECK_ONLY" == true ]]; then
     if [[ "$NOTIFY" == true ]]; then
         send_notification "Update available: ${INSTALLED:-unknown} → $LATEST"
     fi
+    exit 0
+fi
+
+# Dry-run mode: show what would happen without doing anything
+if [[ "$DRY_RUN" == true ]]; then
+    echo ""
+    echo -e "${BLUE}🧪 DRY RUN - No changes will be made${NC}"
+    echo "─────────────────────────────────────"
+    echo -e "  Would update: ${INSTALLED:-unknown} → $LATEST"
+    echo -e "  Download URL: $DOWNLOAD_URL"
+    echo -e "  AUR version:  ${AUR:-unknown}"
+    if [[ "$AUR" != "unknown" ]] && version_gte "$AUR" "$LATEST"; then
+        echo -e "  Method:       ${GREEN}AUR (yay)${NC}"
+    elif [[ "$AUR" != "unknown" ]]; then
+        echo -e "  Method:       ${YELLOW}Direct install (AUR behind: $AUR < $LATEST)${NC}"
+    else
+        echo -e "  Method:       ${YELLOW}Direct install (AUR version unknown)${NC}"
+    fi
+    echo -e "  Pacman:       $(if [[ "$PACMAN_TRACKED" == true ]]; then echo "tracked"; else echo "untracked (--overwrite)"; fi)"
+    echo -e "  Backup dir:   $BACKUP_DIR"
+    echo ""
+    echo -e "${DIM}  Run without --dry-run to perform the update.${NC}"
+    log_event "DRY_RUN from=${INSTALLED:-unknown} to=$LATEST"
     exit 0
 fi
 
@@ -1214,10 +1364,13 @@ else
 fi
 
 # Try AUR first if it has the latest
-if version_gte "$AUR" "$LATEST"; then
+if [[ "$AUR" != "unknown" ]] && version_gte "$AUR" "$LATEST"; then
     echo -e "${BLUE}📦 Updating via yay...${NC}"
+    log_event "AUR_ATTEMPT version=$AUR"
     if yay -S --noconfirm --overwrite '/opt/beeper/*' beeper-v4-bin; then
         echo -e "${GREEN}✅ Updated to $LATEST via AUR!${NC}"
+        log_event "AUR_SUCCESS version=$LATEST"
+        record_update_history "${INSTALLED:-unknown}" "$LATEST" "aur" "success"
 
         # Set up Wayland desktop override
         setup_wayland_desktop_override
@@ -1240,12 +1393,25 @@ if version_gte "$AUR" "$LATEST"; then
         fi
     else
         echo -e "${YELLOW}⚠️  AUR update failed, falling back to direct install...${NC}"
+        log_event "AUR_FAILED falling_back=direct"
     fi
 fi
 
+# Determine reason for direct install
+DIRECT_REASON="direct"
+if [[ "$AUR" == "unknown" ]]; then
+    DIRECT_REASON="aur-unknown"
+elif ! version_gte "$AUR" "$LATEST"; then
+    DIRECT_REASON="aur-behind"
+else
+    DIRECT_REASON="aur-failed"
+fi
+
 # Direct install with self-healing
-if perform_update; then
+if perform_update "$DIRECT_REASON"; then
+    log_event "SESSION_END status=success"
     exit 0
 else
+    log_event "SESSION_END status=failed"
     exit 1
 fi
