@@ -4,7 +4,7 @@
 
 set -e
 
-SCRIPT_VERSION="1.5.0"
+SCRIPT_VERSION="1.6.0"
 LOCKFILE="/tmp/update-beeper.lock"
 BEEPER_API="https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop"
 CHANGELOG_URL="https://www.beeper.com/changelog/desktop"
@@ -497,6 +497,58 @@ check_versions() {
     if pacman -Q beeper-v4-bin &>/dev/null; then
         PACMAN_TRACKED=true
     fi
+}
+
+#──────────────────────────────────────────────────────────────────────────────
+# PACMAN DESYNC PREVENTION
+#──────────────────────────────────────────────────────────────────────────────
+
+# After a direct install, pacman's database still tracks beeper-v4-bin at
+# the old AUR version. This desync causes omarchy-update (yay -Sua) to
+# attempt updating a package whose on-disk files don't match, potentially
+# blocking the entire system update.
+#
+# Strategy: move installed files aside, let pacman -Rdd remove the stale
+# database entry (it won't find files to delete), then restore our files.
+
+deregister_pacman_tracking() {
+    if ! pacman -Q beeper-v4-bin &>/dev/null; then
+        return 0  # Already untracked, nothing to do
+    fi
+
+    local pacman_version
+    pacman_version=$(pacman -Q beeper-v4-bin 2>/dev/null | awk '{print $2}' | cut -d'-' -f1)
+    action "Deregistering stale pacman entry (tracked: ${pacman_version}, actual: ${LATEST})"
+
+    # 1. Move our direct-install files to a safe location
+    if ! sudo mv "$INSTALL_DIR" "${INSTALL_DIR}-deregister-tmp" 2>/dev/null; then
+        warn "Could not move $INSTALL_DIR aside — skipping deregistration"
+        hint "Run manually: sudo pacman -Rdd beeper-v4-bin && sudo mv ${INSTALL_DIR}-deregister-tmp ${INSTALL_DIR}"
+        return 1
+    fi
+
+    # 2. Remove pacman tracking (files already moved, so nothing gets deleted)
+    if sudo pacman -Rdd --noconfirm beeper-v4-bin 2>/dev/null; then
+        pass "Pacman tracking removed"
+    else
+        warn "pacman -Rdd failed — restoring files"
+        sudo mv "${INSTALL_DIR}-deregister-tmp" "$INSTALL_DIR" 2>/dev/null
+        return 1
+    fi
+
+    # 3. Restore our files
+    if sudo mv "${INSTALL_DIR}-deregister-tmp" "$INSTALL_DIR" 2>/dev/null; then
+        pass "Files restored"
+        PACMAN_TRACKED=false
+        log_event "PACMAN_DEREGISTERED old_version=$pacman_version"
+    else
+        # Critical: files exist but at wrong path
+        fail "Could not restore files from ${INSTALL_DIR}-deregister-tmp"
+        hint "Run: sudo mv ${INSTALL_DIR}-deregister-tmp ${INSTALL_DIR}"
+        return 1
+    fi
+
+    return 0
 }
 
 #──────────────────────────────────────────────────────────────────────────────
@@ -1235,11 +1287,13 @@ perform_update() {
         log_event "UPDATE_SUCCESS version=$LATEST method=direct"
         record_update_history "${INSTALLED:-unknown}" "$LATEST" "direct" "success"
 
-        summary_box "success"
-
-        if [[ "$reason" != "aur-failed" ]]; then
-            hint "Run 'yay -Syu beeper-v4-bin' when AUR catches up to resync"
+        # Prevent pacman desync: remove stale AUR tracking after direct install
+        # so omarchy-update (yay -Sua) won't try to update the desynced package
+        if [[ "$PACMAN_TRACKED" == true ]]; then
+            deregister_pacman_tracking
         fi
+
+        summary_box "success"
 
         [[ "$NOTIFY" == true ]] && send_notification "Updated to $LATEST"
         return 0
