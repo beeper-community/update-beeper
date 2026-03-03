@@ -57,7 +57,7 @@ Beeper Desktop
 ### After
 
 ```
-🐝 Beeper Updater v1.5.0
+🐝 Beeper Updater v1.7.0
 
 [1/8] Checking versions
   ✓ Update available
@@ -175,6 +175,8 @@ Each stage is verified and retried with targeted fixes before falling back to au
 | Version mismatch    | Fresh download                    |
 | Startup crash       | Clear Electron cache, retry       |
 | Untrusted domain    | Abort download                    |
+| Pacman version desync | Deregister stale AUR DB entry   |
+| Orphaned runtime deps | Mark as explicitly installed     |
 | All retries fail    | **Automatic rollback** to backup  |
 
 </details>
@@ -185,7 +187,7 @@ Each stage is verified and retried with targeted fixes before falling back to au
 
 | Path | Purpose |
 |------|---------|
-| `/opt/beeper/` | Installation directory |
+| `/opt/Beeper/` | Installation directory |
 | `/opt/beeper-backups/` | Rolling backups (last 3) |
 | `~/.config/BeeperTexts/` | User config + caches |
 | `~/.local/share/update-beeper/update-beeper.log` | Event log |
@@ -211,7 +213,7 @@ Each stage is verified and retried with targeted fixes before falling back to au
 <details>
 <summary>Should I keep the AUR package?</summary>
 
-Yes. When AUR catches up, run `yay -Syu beeper-v4-bin` to resync. The script tells you when this happens.
+It's optional. After a direct install, the script automatically deregisters the stale AUR entry from pacman's database (v1.6.0+) and preserves runtime dependencies from orphan cleanup (v1.7.0+). If AUR catches up later, you can reinstall with `yay -S beeper-v4-bin`.
 
 </details>
 
