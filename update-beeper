@@ -4,7 +4,7 @@
 
 set -e
 
-SCRIPT_VERSION="1.6.0"
+SCRIPT_VERSION="1.7.0"
 LOCKFILE="/tmp/update-beeper.lock"
 BEEPER_API="https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop"
 CHANGELOG_URL="https://www.beeper.com/changelog/desktop"
@@ -35,6 +35,11 @@ MIN_FREE_SPACE_MB=500
 MAX_DOWNLOAD_RETRIES=2
 MAX_EXTRACTION_RETRIES=2
 MAX_STARTUP_RETRIES=2
+
+# Runtime dependencies that Beeper needs but pacman won't track after
+# deregistration. Without this, orphan cleanup (pacman -Rns $(pacman -Qdtq))
+# can silently remove these, breaking tray icons, notifications, etc.
+BEEPER_RUNTIME_DEPS=(libappindicator libnotify libsecret hicolor-icon-theme)
 
 # ── Beeper Brand Colors (True Color) ─────────────────────────────────────
 # Primary brand: purple #6953f2, secondary: blue #0c52f9
@@ -541,6 +546,7 @@ deregister_pacman_tracking() {
         pass "Files restored"
         PACMAN_TRACKED=false
         log_event "PACMAN_DEREGISTERED old_version=$pacman_version"
+        preserve_runtime_deps
     else
         # Critical: files exist but at wrong path
         fail "Could not restore files from ${INSTALL_DIR}-deregister-tmp"
@@ -549,6 +555,48 @@ deregister_pacman_tracking() {
     fi
 
     return 0
+}
+
+# ── Preserve runtime deps after pacman deregistration ────────────────────
+# When we remove beeper-v4-bin from pacman's DB, its dependencies become
+# orphans (install reason = "dependency" with no dependents). The next
+# `pacman -Rns $(pacman -Qdtq)` or similar orphan cleanup will silently
+# remove them, breaking tray icons, notifications, keyring, etc.
+#
+# Fix: mark each dep as "explicitly installed" — a DB-only operation that
+# costs nothing but prevents orphan cleanup from touching them.
+
+preserve_runtime_deps() {
+    local dep preserved=0 skipped=0
+
+    for dep in "${BEEPER_RUNTIME_DEPS[@]}"; do
+        if ! pacman -Q "$dep" &>/dev/null; then
+            # Not installed — nothing to preserve
+            (( skipped++ ))
+            continue
+        fi
+
+        local reason
+        reason=$(pacman -Qi "$dep" 2>/dev/null | awk -F': ' '/Install Reason/{print $2}')
+
+        if [[ "$reason" == *"Explicitly"* ]]; then
+            # Already explicit — safe from orphan cleanup
+            (( skipped++ ))
+            continue
+        fi
+
+        # Mark as explicitly installed (DB-only, no download/reinstall)
+        if sudo pacman -D --asexplicit "$dep" &>/dev/null; then
+            (( preserved++ ))
+        else
+            warn "Could not mark $dep as explicit — may be removed by orphan cleanup"
+        fi
+    done
+
+    if (( preserved > 0 )); then
+        pass "Preserved $preserved runtime dep(s) from orphan cleanup"
+        log_event "RUNTIME_DEPS_PRESERVED count=$preserved"
+    fi
 }
 
 #──────────────────────────────────────────────────────────────────────────────
