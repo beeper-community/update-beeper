@@ -891,14 +891,193 @@ menu_bash() {
     done
 }
 
-# Main menu loop (bash-only for now; backends added in next commit)
+menu_fzf() {
+    local items=("${MENU_ITEMS[@]}")
+    local current_group=""
+    local fzf_input=""
+
+    for item in "${items[@]}"; do
+        IFS='|' read -r key name desc group <<< "$item"
+
+        # Group separator (non-selectable)
+        if [[ -n "$group" && "$group" != "$current_group" ]]; then
+            current_group="$group"
+            fzf_input+="── ${current_group} ──\n"
+        elif [[ -z "$group" && -n "$current_group" ]]; then
+            current_group=""
+            fzf_input+="──\n"
+        fi
+
+        if [[ -n "$desc" ]]; then
+            fzf_input+="${key}|  ${name}  ·  ${desc}\n"
+        else
+            fzf_input+="${key}|  ${name}\n"
+        fi
+    done
+
+    local branch_badge=""
+    [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" [$ACTIVE_BRANCH]"
+
+    local result
+    result=$(echo -e "$fzf_input" | grep -v '^──' | fzf \
+        --height=~20 \
+        --layout=reverse \
+        --border=rounded \
+        --prompt="  " \
+        --header="🐝 Beeper Updater v${SCRIPT_VERSION}${branch_badge}" \
+        --header-first \
+        --delimiter='|' \
+        --with-nth=2 \
+        --ansi \
+        --no-info \
+        --color="header:#6953f2,pointer:#6953f2,marker:#50c878,prompt:#a08cff" \
+        2>/dev/null)
+
+    if [[ -n "$result" ]]; then
+        echo "$result" | cut -d'|' -f1
+    else
+        echo "exit"
+    fi
+}
+
+menu_dialog() {
+    local items=("${MENU_ITEMS[@]}")
+    local dialog_args=()
+    local current_group=""
+
+    for item in "${items[@]}"; do
+        IFS='|' read -r key name desc group <<< "$item"
+
+        # Group separator
+        if [[ -n "$group" && "$group" != "$current_group" ]]; then
+            current_group="$group"
+            dialog_args+=("" "── ${current_group} ──")
+        elif [[ -z "$group" && -n "$current_group" ]]; then
+            current_group=""
+            dialog_args+=("" "──")
+        fi
+
+        dialog_args+=("$key" "${name}${desc:+ — ${desc}}")
+    done
+
+    local branch_badge=""
+    [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" [$ACTIVE_BRANCH]"
+
+    local result
+    result=$(dialog \
+        --title "Beeper Updater v${SCRIPT_VERSION}${branch_badge}" \
+        --menu "Select an action:" \
+        20 60 12 \
+        "${dialog_args[@]}" \
+        2>&1 >/dev/tty)
+
+    if [[ -n "$result" ]]; then
+        echo "$result"
+    else
+        echo "exit"
+    fi
+}
+
+menu_whiptail() {
+    local items=("${MENU_ITEMS[@]}")
+    local wt_args=()
+    local current_group=""
+
+    for item in "${items[@]}"; do
+        IFS='|' read -r key name desc group <<< "$item"
+
+        if [[ -n "$group" && "$group" != "$current_group" ]]; then
+            current_group="$group"
+            wt_args+=("" "── ${current_group} ──")
+        elif [[ -z "$group" && -n "$current_group" ]]; then
+            current_group=""
+            wt_args+=("" "──")
+        fi
+
+        wt_args+=("$key" "${name}${desc:+ — ${desc}}")
+    done
+
+    local branch_badge=""
+    [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" [$ACTIVE_BRANCH]"
+
+    local result
+    result=$(whiptail \
+        --title "Beeper Updater v${SCRIPT_VERSION}${branch_badge}" \
+        --menu "Select an action:" \
+        20 60 12 \
+        "${wt_args[@]}" \
+        3>&1 1>&2 2>&3)
+
+    if [[ -n "$result" ]]; then
+        echo "$result"
+    else
+        echo "exit"
+    fi
+}
+
+# Detect best available menu backend
+detect_menu_backend() {
+    if command -v fzf &>/dev/null; then echo "fzf"
+    elif command -v dialog &>/dev/null; then echo "dialog"
+    elif command -v whiptail &>/dev/null; then echo "whiptail"
+    else echo "bash"
+    fi
+}
+
+# Sub-menu for branch switching
+switch_branch_menu() {
+    local current="$ACTIVE_BRANCH"
+    local branches=("stable" "nightly")
+    local descs=("Production releases" "Pre-release fixes (~2 months ahead)")
+
+    print_header
+    log "  ${ACCENT}Current branch:${NC} ${BOLD}${current}${NC}"
+    log ""
+
+    local i=0
+    for b in "${branches[@]}"; do
+        (( i++ ))
+        if [[ "$b" == "$current" ]]; then
+            log "  ${PURPLE}${BOLD}${i}) ${b}${NC}  ${DIM}(current)${NC}  ${INFO}${descs[$((i-1))]}${NC}"
+        else
+            log "    ${i}) ${b}  ${INFO}${descs[$((i-1))]}${NC}"
+        fi
+    done
+
+    log ""
+    printf "  Select branch [1-${#branches[@]}, Enter to cancel]: "
+    local choice
+    read -r choice
+
+    case "$choice" in
+        1) write_config_branch "stable"; ACTIVE_BRANCH="stable"
+           BEEPER_API="${BEEPER_API_TEMPLATE/\%s/$ACTIVE_BRANCH}"
+           [[ "$current" != "stable" ]] && pass "Switched to ${BOLD}stable${NC}" || pass "Already on ${BOLD}stable${NC}" ;;
+        2) write_config_branch "nightly"; ACTIVE_BRANCH="nightly"
+           BEEPER_API="${BEEPER_API_TEMPLATE/\%s/$ACTIVE_BRANCH}"
+           [[ "$current" != "nightly" ]] && pass "Switched to ${BOLD}nightly${NC}" || pass "Already on ${BOLD}nightly${NC}" ;;
+        *) detail "Cancelled" ;;
+    esac
+    log ""
+}
+
+# Main menu loop
 show_menu() {
+    local backend
+    backend=$(detect_menu_backend)
+
     while true; do
         local selected
-        selected=$(menu_bash)
+        case "$backend" in
+            fzf)      selected=$(menu_fzf) ;;
+            dialog)   selected=$(menu_dialog) ;;
+            whiptail) selected=$(menu_whiptail) ;;
+            bash)     selected=$(menu_bash) ;;
+        esac
 
         case "$selected" in
             update)        return 0 ;;  # Continue to main update flow
+            switch-branch) switch_branch_menu; continue ;;
             rollback)      DO_ROLLBACK=true; return 0 ;;
             dry-run)       DRY_RUN=true; return 0 ;;
             check)         CHECK_ONLY=true; return 0 ;;
