@@ -583,34 +583,180 @@ send_notification() {
 }
 
 show_changelog() {
-    # Get installed version
-    local version=""
-    if [[ -f "$INSTALL_DIR/resources/app/package.json" ]]; then
-        version=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$INSTALL_DIR/resources/app/package.json" | head -1)
+    local data
+    data=$(fetch_cached_data "desktop-changelog" 2>/dev/null)
+
+    if [[ -z "$data" ]] || ! command -v jq &>/dev/null; then
+        # Fallback: open browser (original behavior)
+        local version=""
+        if [[ -f "$INSTALL_DIR/resources/app/package.json" ]]; then
+            version=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$INSTALL_DIR/resources/app/package.json" | head -1)
+        fi
+        print_header
+        log "  ${ACCENT}Changelog${NC}"
+        log ""
+        detail "Opening in browser..."
+        if command -v xdg-open &>/dev/null; then
+            xdg-open "$CHANGELOG_URL" 2>/dev/null &
+        elif command -v open &>/dev/null; then
+            open "$CHANGELOG_URL" 2>/dev/null &
+        else
+            warn "Could not open browser"
+            detail "Visit: ${CHANGELOG_URL}"
+        fi
+        hint "Cached changelog data not available. Install jq for in-terminal display."
+        return 0
     fi
 
-    if [[ -z "$version" ]]; then
-        fail "Could not determine installed Beeper version"
+    # Parse and display changelog entries
+    local output=""
+    local count
+    count=$(echo "$data" | jq '.versions | length')
+
+    print_header
+    log "  ${ACCENT}${BOLD}Changelog${NC} — ${INFO}${count} versions${NC}  ${DIM}(checked $(cache_age_display "desktop-changelog"))${NC}"
+    log ""
+
+    local i=0
+    while (( i < count )); do
+        local ver date
+        ver=$(echo "$data" | jq -r ".versions[$i].version")
+        date=$(echo "$data" | jq -r ".versions[$i].date // \"\"")
+
+        log "  ${BOLD}${ver}${NC}${date:+ ${DIM}(${date})${NC}}"
+
+        # New features
+        local feat_count
+        feat_count=$(echo "$data" | jq ".versions[$i].new_features | length")
+        local f=0
+        while (( f < feat_count )); do
+            local feat
+            feat=$(echo "$data" | jq -r ".versions[$i].new_features[$f]")
+            log "    ${OK}✨${NC} ${feat}"
+            (( f++ ))
+        done
+
+        # Fixes
+        local fix_count
+        fix_count=$(echo "$data" | jq ".versions[$i].fixes | length")
+        local x=0
+        while (( x < fix_count )); do
+            local fix
+            fix=$(echo "$data" | jq -r ".versions[$i].fixes[$x]")
+            log "    ${WARN}🐛${NC} ${fix}"
+            (( x++ ))
+        done
+
+        log ""
+        (( i++ ))
+    done
+
+    return 0
+}
+
+show_whats_new() {
+    local installed=""
+    if [[ -f "$INSTALL_DIR/resources/app/package.json" ]]; then
+        installed=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$INSTALL_DIR/resources/app/package.json" | head -1)
+    fi
+
+    if [[ -z "$installed" ]]; then
+        fail "Could not determine installed version"
         return 1
     fi
 
-    print_header
-    log "  ${ACCENT}Changelog${NC} for ${BOLD}$version${NC}"
-    log ""
-    detail "Opening in browser..."
+    # Also get branch data for latest version
+    local branch_data latest_ver
+    branch_data=$(fetch_cached_data "branch-versions" 2>/dev/null)
+    if [[ -n "$branch_data" ]] && command -v jq &>/dev/null; then
+        latest_ver=$(echo "$branch_data" | jq -r ".branches.${ACTIVE_BRANCH}.version // \"unknown\"")
+    fi
+    [[ -z "$latest_ver" || "$latest_ver" == "null" ]] && latest_ver="unknown"
 
-    # Open changelog in default browser
-    if command -v xdg-open &>/dev/null; then
-        xdg-open "$CHANGELOG_URL" 2>/dev/null &
-    elif command -v open &>/dev/null; then
-        open "$CHANGELOG_URL" 2>/dev/null &
-    else
-        warn "Could not open browser automatically"
-        detail "Visit: ${CHANGELOG_URL}"
+    print_header
+
+    if version_gte "$installed" "${latest_ver:-0}"; then
+        log ""
+        box_top
+        box_row "${OK}${BOLD}✓ You're up to date${NC}"
+        box_blank
+        box_row "${ACCENT}Installed${NC}   ${installed} (${ACTIVE_BRANCH})"
+        box_row "${ACCENT}Latest${NC}      ${latest_ver}"
+        box_bottom
+        log ""
+        return 0
     fi
 
+    # Build "what's new" from changelog data
+    local changelog
+    changelog=$(fetch_cached_data "desktop-changelog" 2>/dev/null)
+
     log ""
-    hint "Search for '$version' on the page to find your version's changes"
+    box_top "What's New"
+    box_row "${ACCENT}You${NC}  ${installed} → ${ACCENT}Latest${NC}  ${BOLD}${latest_ver}${NC} (${ACTIVE_BRANCH})"
+    box_blank
+
+    if [[ -n "$changelog" ]] && command -v jq &>/dev/null; then
+        local features=() fixes=() versions_spanned=0
+        local count
+        count=$(echo "$changelog" | jq '.versions | length')
+
+        local i=0
+        while (( i < count )); do
+            local ver
+            ver=$(echo "$changelog" | jq -r ".versions[$i].version" | sed 's/^v//')
+            # Include versions newer than installed
+            if [[ "$ver" != "$installed" ]] && ! version_gte "$installed" "$ver"; then
+                (( versions_spanned++ ))
+
+                local feat_count
+                feat_count=$(echo "$changelog" | jq ".versions[$i].new_features | length")
+                local f=0
+                while (( f < feat_count )); do
+                    features+=("$(echo "$changelog" | jq -r ".versions[$i].new_features[$f]")")
+                    (( f++ ))
+                done
+
+                local fix_count
+                fix_count=$(echo "$changelog" | jq ".versions[$i].fixes | length")
+                local x=0
+                while (( x < fix_count )); do
+                    fixes+=("$(echo "$changelog" | jq -r ".versions[$i].fixes[$x]")")
+                    (( x++ ))
+                done
+            fi
+            # Stop once we pass our installed version
+            if [[ "$ver" == "$installed" ]] || version_gte "$installed" "$ver"; then
+                break
+            fi
+            (( i++ ))
+        done
+
+        if (( ${#features[@]} > 0 )); then
+            box_sep "New Features"
+            for feat in "${features[@]}"; do
+                box_row "  ${OK}✨${NC} ${feat}"
+            done
+        fi
+
+        if (( ${#fixes[@]} > 0 )); then
+            box_sep "Fixes"
+            for fix in "${fixes[@]}"; do
+                box_row "  ${WARN}🐛${NC} ${fix}"
+            done
+        fi
+
+        if (( versions_spanned > 1 )); then
+            box_blank
+            box_row "${DIM}Spans ${versions_spanned} versions${NC}"
+        fi
+    else
+        box_row "${INFO}Changelog data not available${NC}"
+        box_row "${INFO}Install jq and wait for beeper-intel refresh${NC}"
+    fi
+
+    box_bottom
+    log ""
     return 0
 }
 
@@ -1746,10 +1892,10 @@ if [[ "$SHOW_BRANCH" == true ]]; then
     exit 0
 fi
 
-# Handle what's new display (early exit — implemented in Task 4)
+# Handle what's new display (early exit)
 if [[ "$SHOW_WHATS_NEW" == true ]]; then
-    echo "What's new: not yet implemented (coming in v1.9.0)"
-    exit 0
+    show_whats_new
+    exit $?
 fi
 
 # Handle interactive menu (early exit — implemented in Tasks 5-6)
