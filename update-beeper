@@ -54,7 +54,7 @@ write_config_branch() {
 }
 
 ACTIVE_BRANCH=$(read_config_branch)
-BEEPER_API=$(printf "$BEEPER_API_TEMPLATE" "$ACTIVE_BRANCH")
+BEEPER_API="${BEEPER_API_TEMPLATE/\%s/$ACTIVE_BRANCH}"
 
 # Minimum required free space (500MB for download + extraction + buffer)
 MIN_FREE_SPACE_MB=500
@@ -177,7 +177,7 @@ while [[ $# -gt 0 ]]; do
             if [[ -n "${2:-}" ]] && [[ "$2" =~ ^(stable|nightly|beta)$ ]]; then
                 SET_BRANCH="$2"; shift 2
             elif [[ -n "${2:-}" ]] && [[ "$2" != --* ]]; then
-                echo "Unknown branch: $2 (valid: stable, nightly)"; exit 1
+                echo "Unknown branch: $2 (valid: stable, nightly, beta)"; exit 1
             else
                 SHOW_BRANCH=true; shift
             fi
@@ -1669,7 +1669,7 @@ if [[ -n "$SET_BRANCH" ]]; then
     old_branch="$ACTIVE_BRANCH"
     write_config_branch "$SET_BRANCH"
     ACTIVE_BRANCH="$SET_BRANCH"
-    BEEPER_API=$(printf "$BEEPER_API_TEMPLATE" "$ACTIVE_BRANCH")
+    BEEPER_API="${BEEPER_API_TEMPLATE/\%s/$ACTIVE_BRANCH}"
     print_header
     if [[ "$old_branch" == "$SET_BRANCH" ]]; then
         pass "Already on ${BOLD}${SET_BRANCH}${NC} branch"
@@ -1682,6 +1682,18 @@ fi
 
 if [[ "$SHOW_BRANCH" == true ]]; then
     echo "$ACTIVE_BRANCH"
+    exit 0
+fi
+
+# Handle what's new display (early exit — implemented in Task 4)
+if [[ "$SHOW_WHATS_NEW" == true ]]; then
+    echo "What's new: not yet implemented (coming in v1.9.0)"
+    exit 0
+fi
+
+# Handle interactive menu (early exit — implemented in Tasks 5-6)
+if [[ "$SHOW_MENU" == true ]]; then
+    echo "Interactive menu: not yet implemented (coming in v1.9.0)"
     exit 0
 fi
 
