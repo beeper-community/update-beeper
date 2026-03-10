@@ -1159,6 +1159,29 @@ setup_wayland_desktop_override() {
     return 0
 }
 
+install_icon() {
+    local bundled_icon="$INSTALL_DIR/usr/share/icons/hicolor/512x512/apps/beepertexts.png"
+    local user_icon_dir="$HOME/.local/share/icons/hicolor/512x512/apps"
+    local user_icon="$user_icon_dir/beepertexts.png"
+
+    if [[ ! -f "$bundled_icon" ]]; then
+        warn "Bundled icon not found, skipping icon install"
+        return 0
+    fi
+
+    mkdir -p "$user_icon_dir"
+
+    if [[ -f "$user_icon" ]] && cmp -s "$bundled_icon" "$user_icon"; then
+        return 0  # Already up to date
+    fi
+
+    cp "$bundled_icon" "$user_icon"
+    gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+
+    pass "Icon installed (512x512)"
+    return 0
+}
+
 #──────────────────────────────────────────────────────────────────────────────
 # MAIN UPDATE LOGIC WITH SELF-HEALING
 #──────────────────────────────────────────────────────────────────────────────
@@ -1289,6 +1312,7 @@ do_direct_install() {
     fi
 
     setup_wayland_desktop_override
+    install_icon
 
     # Phase 8: Verifying startup
     next_phase "Verifying startup"
