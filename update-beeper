@@ -4,7 +4,7 @@
 
 set -e
 
-SCRIPT_VERSION="1.8.0"
+SCRIPT_VERSION="1.9.0"
 LOCKFILE="/tmp/update-beeper.lock"
 # BEEPER_API is set dynamically after branch config is read (see ACTIVE_BRANCH)
 CHANGELOG_URL="https://www.beeper.com/changelog/desktop"

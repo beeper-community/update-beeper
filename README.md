@@ -57,7 +57,7 @@ Beeper Desktop
 ### After
 
 ```
-🐝 Beeper Updater v1.8.0
+🐝 Beeper Updater v1.9.0
 
 [1/8] Checking versions
   ✓ Update available
@@ -140,6 +140,9 @@ update-beeper --history      # Show past updates
 | `--history`       |       | Show update history                  |
 | `--skip-checksum` |       | Skip SHA256 verification             |
 | `--check-desktop` |       | Validate desktop shortcut and icon   |
+| `--branch`        |       | Set or show active branch (stable, nightly) |
+| `--whats-new`     | `-w`  | Show changes since installed version |
+| `--menu`          | `-m`  | Force interactive menu               |
 | `--version`       | `-v`  | Show script version                  |
 | `--help`          | `-h`  | Show help                            |
 
@@ -188,6 +191,23 @@ Each stage is verified and retried with targeted fixes before falling back to au
 
 ---
 
+## Interactive Menu
+
+When run with no flags in an interactive terminal (TTY), update-beeper shows an interactive menu instead of running a silent update. Non-interactive contexts (cron, systemd, pipes) still auto-update as before.
+
+```bash
+update-beeper          # Shows menu in terminal, auto-updates in cron
+update-beeper --menu   # Force menu even with other flags
+```
+
+**Backend detection** picks the best available UI: fzf, dialog, whiptail, or a pure-bash fallback -- no extra dependencies required.
+
+**Branch support** lets you switch between `stable` and `nightly` channels. Branch preference persists in `~/.config/update-beeper/config`.
+
+**In-terminal changelog** shows version diffs pulled from cached [beeper-intel](https://github.com/beeper-community/beeper-intel) data (6-hour local cache).
+
+---
+
 ## File Locations
 
 | Path | Purpose |
@@ -199,7 +219,9 @@ Each stage is verified and retried with targeted fixes before falling back to au
 | `~/.local/share/icons/hicolor/512x512/apps/beepertexts.png` | Launcher icon |
 | `~/.local/share/update-beeper/update-beeper.log` | Event log |
 | `~/.local/share/update-beeper/history.txt` | Update history |
+| `~/.config/update-beeper/config` | Branch and preferences |
 | `~/.cache/update-beeper/checksums.txt` | SHA256 cache |
+| `~/.cache/update-beeper/` | Intel data cache (versions, changelog) |
 
 ---
 
@@ -248,7 +270,7 @@ The core updater works on any x86_64 Linux. AUR version checking requires pacman
 <details>
 <summary>Can I get bleeding-edge fixes before a stable release?</summary>
 
-Beeper publishes nightly builds at `beeper.com/download/nightly/now`. These contain crash fixes and patches that haven't reached stable yet (e.g., the 4.2.623 crash-loop was fixed in nightly before the next stable release). Note: update-beeper currently tracks stable releases only.
+Yes -- run `update-beeper --branch nightly` to switch to the nightly channel. Nightly builds contain crash fixes and patches that haven't reached stable yet. Switch back anytime with `update-beeper --branch stable`.
 
 </details>
 

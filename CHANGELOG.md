@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-03-10
+
+### Added
+
+- Interactive CLI menu with progressive backend detection (fzf → dialog → whiptail → pure bash)
+- Branch support: switch between stable and nightly channels (`--branch`)
+- In-terminal changelog display with version diffs (`--whats-new`)
+- Unified box rendering system with dynamic terminal-width adaptation
+- Data fetching from beeper-intel with 6-hour local cache
+- beeper-intel GitHub Action for automated version polling and changelog scraping
+
+### Changed
+
+- `--changelog` now shows formatted changelog in terminal (falls back to browser)
+- `--versions` now shows multi-branch status
+- Running with no flags in TTY shows interactive menu (auto-update still works in cron/systemd)
+
+### Technical
+
+- Refactored summary_box and dry-run panel to shared box primitives
+- Branch config persists in `~/.config/update-beeper/config`
+- Cache stored in `~/.cache/update-beeper/`
+
 ## [1.8.0] - 2026-03-09
 
 ### Added
@@ -266,6 +289,7 @@ The app downloads updates but can't overwrite pacman-managed files. This script
 downloads directly from Beeper's API, bypassing both the broken built-in updater
 and the often-outdated AUR package.
 
+[1.9.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.9.0
 [1.8.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.8.0
 [1.7.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.7.0
 [1.6.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.6.0
