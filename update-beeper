@@ -86,8 +86,8 @@ fetch_cached_data() {
     # Fetch fresh data
     local data
     data=$(curl -sL -m 10 "$url" 2>/dev/null)
-    if [[ -n "$data" ]] && echo "$data" | head -c1 | grep -q '{'; then
-        echo "$data" > "$cache_file"
+    if [[ -n "$data" ]] && [[ "${data:0:1}" == "{" ]] && [[ "${data: -1}" == "}" ]]; then
+        echo "$data" > "${cache_file}.tmp" && mv -f "${cache_file}.tmp" "$cache_file"
         echo "$data"
         return 0
     fi
