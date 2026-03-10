@@ -245,6 +245,13 @@ The core updater works on any x86_64 Linux. AUR version checking requires pacman
 
 </details>
 
+<details>
+<summary>Can I get bleeding-edge fixes before a stable release?</summary>
+
+Beeper publishes nightly builds at `beeper.com/download/nightly/now`. These contain crash fixes and patches that haven't reached stable yet (e.g., the 4.2.623 crash-loop was fixed in nightly before the next stable release). Note: update-beeper currently tracks stable releases only.
+
+</details>
+
 ---
 
 [CONTRIBUTING.md](CONTRIBUTING.md) · [CHANGELOG.md](CHANGELOG.md) · MIT License
