@@ -51,6 +51,7 @@ if [[ -f "update-beeper" ]] && [[ -f "beeper-version" ]]; then
     echo "   Installing from local files..."
     cp update-beeper "$INSTALL_DIR/" || error_exit "Failed to copy update-beeper"
     cp beeper-version "$INSTALL_DIR/" || error_exit "Failed to copy beeper-version"
+    cp beeper-health "$INSTALL_DIR/" || error_exit "Failed to copy beeper-health"
 else
     # Remote install via curl
     echo "   Downloading update-beeper..."
@@ -58,11 +59,15 @@ else
 
     echo "   Downloading beeper-version..."
     curl -fsSL "$REPO/beeper-version" -o "$INSTALL_DIR/beeper-version" || error_exit "Failed to download beeper-version"
+
+    echo "   Downloading beeper-health..."
+    curl -fsSL "$REPO/beeper-health" -o "$INSTALL_DIR/beeper-health" || error_exit "Failed to download beeper-health"
 fi
 
 # Make executable
 chmod +x "$INSTALL_DIR/update-beeper" || error_exit "Failed to make update-beeper executable"
 chmod +x "$INSTALL_DIR/beeper-version" || error_exit "Failed to make beeper-version executable"
+chmod +x "$INSTALL_DIR/beeper-health" || error_exit "Failed to make beeper-health executable"
 
 echo ""
 echo -e "${GREEN}✓ Installed successfully!${NC}"
@@ -82,6 +87,7 @@ else
     echo "   Commands available:"
     echo "     update-beeper    - Update Beeper to latest version"
     echo "     beeper-version   - Check version status"
+    echo "     beeper-health    - Monitor Beeper + validate desktop shortcut"
 fi
 
 echo ""

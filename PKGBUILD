@@ -2,7 +2,7 @@
 # Contributor: Roberto Gogoni <your-email@example.com>
 
 pkgname=update-beeper
-pkgver=1.0.0
+pkgver=1.8.0
 pkgrel=1
 pkgdesc="Self-healing Beeper Desktop updater for Arch Linux with automatic rollback"
 arch=('any')
@@ -22,6 +22,7 @@ package() {
     # Install scripts
     install -Dm755 update-beeper "${pkgdir}/usr/bin/update-beeper"
     install -Dm755 beeper-version "${pkgdir}/usr/bin/beeper-version"
+    install -Dm755 beeper-health "${pkgdir}/usr/bin/beeper-health"
 
     # Install systemd user units
     install -Dm644 systemd/update-beeper-user.service "${pkgdir}/usr/lib/systemd/user/update-beeper.service"

@@ -57,19 +57,20 @@ Beeper Desktop
 ### After
 
 ```
-🐝 Beeper Updater v1.7.0
+🐝 Beeper Updater v1.8.0
 
 [1/8] Checking versions
   ✓ Update available
 
-[4/8] Downloading 4.2.547
+[4/8] Downloading 4.2.630
   ✓ 213MB verified
 
-╭─────────────────────────────────╮
-│  ✓ Update complete              │
-│  Version  4.2.482 → 4.2.547     │
-│  Duration 52s                   │
-╰─────────────────────────────────╯
+╭──────────────────────────────────────╮
+│  ✓ Update complete                   │
+│  Version  4.2.587 → 4.2.630          │
+│  Duration 52s                        │
+│  Desktop  beeper-wayland.desktop     │
+╰──────────────────────────────────────╯
 ```
 
 </td>
@@ -95,8 +96,10 @@ curl -o ~/.local/bin/update-beeper \
   https://raw.githubusercontent.com/beeper-community/update-beeper/master/update-beeper
 curl -o ~/.local/bin/beeper-version \
   https://raw.githubusercontent.com/beeper-community/update-beeper/master/beeper-version
+curl -o ~/.local/bin/beeper-health \
+  https://raw.githubusercontent.com/beeper-community/update-beeper/master/beeper-health
 
-chmod +x ~/.local/bin/update-beeper ~/.local/bin/beeper-version
+chmod +x ~/.local/bin/update-beeper ~/.local/bin/beeper-version ~/.local/bin/beeper-health
 ```
 
 **Clone & Install:**
@@ -113,12 +116,13 @@ cd update-beeper && ./install.sh
 ## Usage
 
 ```bash
-update-beeper              # Update to latest
-update-beeper --versions   # Show all versions
-update-beeper --dry-run    # Preview without changes
-update-beeper --force      # Force reinstall
-update-beeper --rollback   # Rollback to previous version
-update-beeper --history    # Show past updates
+update-beeper                # Update to latest
+update-beeper --versions     # Show all versions
+update-beeper --check-desktop # Validate desktop shortcut and icon
+update-beeper --dry-run      # Preview without changes
+update-beeper --force        # Force reinstall
+update-beeper --rollback     # Rollback to previous version
+update-beeper --history      # Show past updates
 ```
 
 ### All Flags
@@ -135,6 +139,7 @@ update-beeper --history    # Show past updates
 | `--dry-run`       |       | Preview what would happen            |
 | `--history`       |       | Show update history                  |
 | `--skip-checksum` |       | Skip SHA256 verification             |
+| `--check-desktop` |       | Validate desktop shortcut and icon   |
 | `--version`       | `-v`  | Show script version                  |
 | `--help`          | `-h`  | Show help                            |
 
@@ -187,9 +192,11 @@ Each stage is verified and retried with targeted fixes before falling back to au
 
 | Path | Purpose |
 |------|---------|
-| `/opt/Beeper/` | Installation directory |
+| `/opt/beeper/` | Installation directory |
 | `/opt/beeper-backups/` | Rolling backups (last 3) |
 | `~/.config/BeeperTexts/` | User config + caches |
+| `~/.local/share/applications/beeper-wayland.desktop` | Desktop shortcut (Wayland) |
+| `~/.local/share/icons/hicolor/512x512/apps/beepertexts.png` | Launcher icon |
 | `~/.local/share/update-beeper/update-beeper.log` | Event log |
 | `~/.local/share/update-beeper/history.txt` | Update history |
 | `~/.cache/update-beeper/checksums.txt` | SHA256 cache |
@@ -227,7 +234,7 @@ The script automatically rolls back. You can also run `update-beeper --rollback`
 <details>
 <summary>Blank window on Wayland (Hyprland/Sway)?</summary>
 
-Run `update-beeper --force` to reinstall with native Wayland flags. Also fixes blank screen after sleep.
+Run `update-beeper --force` to reinstall with native Wayland flags. The updater automatically creates a `beeper-wayland.desktop` shortcut, installs the launcher icon, and detects your `~/bin/beeper-wayland` wrapper if present. Run `update-beeper --check-desktop` to validate your shortcut is healthy.
 
 </details>
 

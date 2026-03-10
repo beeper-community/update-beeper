@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-03-09
+
+### Added
+
+- **Desktop entry validation** — New `validate_desktop_entry()` checks shortcut health: file exists, Exec binary resolves, version matches installed, icon resolves in theme, no stale duplicates
+- **`--check-desktop` flag** — Standalone desktop shortcut validation without running an update
+- **Icon installation** — New `install_icon()` copies bundled 512px Beeper icon to `~/.local/share/icons/hicolor/` so launchers display the icon properly
+- **Stale shortcut cleanup** — New `cleanup_stale_desktop_files()` removes leftover `beeper.desktop` and `beepertexts.desktop` files that cause duplicate launcher entries
+- **Desktop row in summary box** — Post-update summary now shows which desktop file is configured
+- **`beeper-health --desktop`** — Delegates desktop validation to `update-beeper --check-desktop`
+
+### Changed
+
+- **Rewrote `setup_wayland_desktop_override()`** — Now uses bundled `/opt/beeper/beepertexts.desktop` as source (not the often-missing system file), creates `beeper-wayland.desktop` (matching user convention), detects `~/bin/beeper-wayland` wrapper script, stamps `X-AppImage-Version` for version tracking
+- **Desktop file convention** — Changed from `beeper.desktop` to `beeper-wayland.desktop` to match actual user setup
+- Uses `$INSTALL_DIR` variable instead of hardcoded `/opt/beeper` in desktop exec path
+
+### Fixed
+
+- **`set -e` crash in validation** — `grep -oP` returns exit 1 on no match, killing the script under `set -e`. Added `|| true` to all grep calls in `validate_desktop_entry()`
+
 ## [1.7.0] - 2026-03-03
 
 ### Added
@@ -245,6 +266,11 @@ The app downloads updates but can't overwrite pacman-managed files. This script
 downloads directly from Beeper's API, bypassing both the broken built-in updater
 and the often-outdated AUR package.
 
+[1.8.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.8.0
+[1.7.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.7.0
+[1.6.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.6.0
+[1.5.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.5.0
+[1.4.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.4.0
 [1.3.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.3.0
 [1.2.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.2.0
 [1.1.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.1.0

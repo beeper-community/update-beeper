@@ -20,10 +20,15 @@ elif [[ "$INPUT" =~ (rollback|revert).*(beeper) ]]; then
     echo "🤖 Rolling back Beeper..."
     ~/bin/update-beeper --rollback
 
+elif [[ "$INPUT" =~ (desktop|shortcut|icon).*(check|validate|fix) ]] || [[ "$INPUT" =~ (check|validate).*(desktop|shortcut|icon) ]]; then
+    echo "🤖 Validating Beeper desktop entry..."
+    ~/bin/update-beeper --check-desktop
+
 else
     echo "🤖 I can help with Beeper! Try:"
     echo "   'update beeper'     - Update to latest"
     echo "   'beeper version'    - Show versions"
     echo "   'check beeper'      - Check for updates"
+    echo "   'check desktop'     - Validate desktop shortcut"
     echo "   'rollback beeper'   - Restore previous"
 fi
