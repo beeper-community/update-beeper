@@ -238,7 +238,7 @@ while [[ $# -gt 0 ]]; do
             if [[ -n "${2:-}" ]] && [[ "$2" =~ ^(stable|nightly|beta)$ ]]; then
                 SET_BRANCH="$2"; shift 2
             elif [[ -n "${2:-}" ]] && [[ "$2" != --* ]]; then
-                echo "Unknown branch: $2 (valid: stable, nightly, beta)"; exit 1
+                echo "Unknown branch: $2 (valid: stable, nightly)"; exit 1
             else
                 SHOW_BRANCH=true; shift
             fi
@@ -960,7 +960,7 @@ menu_dialog() {
         --menu "Select an action:" \
         20 60 12 \
         "${dialog_args[@]}" \
-        2>&1 >/dev/tty)
+        2>&1 >/dev/tty) || true
 
     if [[ -n "$result" ]]; then
         echo "$result"
@@ -997,7 +997,7 @@ menu_whiptail() {
         --menu "Select an action:" \
         20 60 12 \
         "${wt_args[@]}" \
-        3>&1 1>&2 2>&3)
+        3>&1 1>&2 2>&3) || true
 
     if [[ -n "$result" ]]; then
         echo "$result"
@@ -1075,9 +1075,9 @@ show_menu() {
             branch-status) SHOW_VERSIONS=true; return 0 ;;
             whats-new)     SHOW_WHATS_NEW=true; return 0 ;;
             changelog)     SHOW_CHANGELOG=true; return 0 ;;
-            history)       cat "$HISTORY_FILE" 2>/dev/null || echo "No update history yet."; continue ;;
+            history)       { cat "$HISTORY_FILE" 2>/dev/null || echo "No update history yet."; } | less -R 2>/dev/null || true; continue ;;
             desktop)       CHECK_DESKTOP=true; return 0 ;;
-            help)          ( usage ) 2>/dev/null; continue ;;
+            help)          ( usage ); continue ;;
             exit|"")       exit 0 ;;
         esac
     done
@@ -2006,9 +2006,10 @@ do_direct_install() {
     check_reset
     verify_disk_space "/tmp" "$MIN_FREE_SPACE_MB"
     verify_disk_space "/opt" 1200
+    local disk_failures=$_check_failures
     check_flush
 
-    if [[ $_check_failures -gt 0 ]]; then
+    if [[ $disk_failures -gt 0 ]]; then
         hint "sudo rm -rf /tmp/beeper-update /opt/beeper-backups/*"
         return 1
     fi
