@@ -1290,9 +1290,9 @@ validate_desktop_entry() {
 
     # 3. Exec binary points to correct version
     local desktop_version installed_version
-    desktop_version=$(grep -oP 'X-AppImage-Version=\K.*' "$USER_DESKTOP_FILE" 2>/dev/null)
+    desktop_version=$(grep -oP 'X-AppImage-Version=\K.*' "$USER_DESKTOP_FILE" 2>/dev/null || true)
     installed_version=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' \
-        "$INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1)
+        "$INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || true)
 
     if [[ -n "$desktop_version" ]] && [[ -n "$installed_version" ]]; then
         if [[ "$desktop_version" == "$installed_version" ]]; then
@@ -1306,7 +1306,7 @@ validate_desktop_entry() {
 
     # 4. Icon resolves
     local icon_name
-    icon_name=$(grep -m1 '^Icon=' "$USER_DESKTOP_FILE" | sed 's/^Icon=//')
+    icon_name=$(grep -m1 '^Icon=' "$USER_DESKTOP_FILE" 2>/dev/null | sed 's/^Icon=//' || true)
     if [[ -n "$icon_name" ]]; then
         if echo "$icon_name" | grep -q '/'; then
             # Absolute path
