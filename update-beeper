@@ -249,18 +249,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Interactive menu: show when no flags passed and running in a TTY
-_any_flag_set=false
-$CHECK_ONLY || $NOTIFY || $FORCE || $SHOW_CHANGELOG || $QUIET || \
-$DO_ROLLBACK || $SHOW_VERSIONS || $SKIP_CHECKSUM || $DRY_RUN || \
-$CHECK_DESKTOP || $SHOW_WHATS_NEW || $SHOW_BRANCH || \
-[[ -n "$SET_BRANCH" ]] && _any_flag_set=true
-
-if [[ "$SHOW_MENU" == true ]] || { [[ "$_any_flag_set" == false ]] && [[ -t 0 ]]; }; then
-    show_menu
-fi
-
 cleanup() {
+    printf '\033[?25h' >/dev/tty 2>/dev/null || true  # Restore cursor if hidden by menu
     sudo_keepalive_stop
     rm -rf "$TMP_DIR" 2>/dev/null || true
     release_lock
@@ -798,91 +788,92 @@ menu_bash() {
     local count=${#items[@]}
     local selected=0
     local current_group=""
+    local _menu_drawn=""
+    local selected_key=""
 
-    # Hide cursor
-    printf '\033[?25l'
-    # Restore cursor on exit
-    trap 'printf "\033[?25h"' RETURN
+    # Hide cursor, restore on any exit (return, Ctrl+C, kill)
+    printf '\033[?25l' >/dev/tty
+    trap 'printf "\033[?25h" >/dev/tty' RETURN
+    trap 'printf "\033[?25h" >/dev/tty; return 130' INT TERM
 
     while true; do
         # Move cursor to top of menu area
         if [[ -n "$_menu_drawn" ]]; then
-            # Move up to redraw
             local total_lines=$(( count + 10 ))  # items + separators + header/footer
-            printf "\033[${total_lines}A"
+            printf "\033[${total_lines}A" >/dev/tty
         fi
         _menu_drawn=1
 
         # Header
         local branch_badge=""
         [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" ${INFO}[${ACTIVE_BRANCH}]${NC}"
-        echo -e ""
-        echo -e "  ${PURPLE}${BOLD}🐝 Beeper Updater${NC} ${INFO}v${SCRIPT_VERSION}${NC}${branch_badge}"
-        echo -e ""
+        echo -e "" >/dev/tty
+        echo -e "  ${PURPLE}${BOLD}🐝 Beeper Updater${NC} ${INFO}v${SCRIPT_VERSION}${NC}${branch_badge}" >/dev/tty
+        echo -e "" >/dev/tty
 
         current_group=""
         local item_index=0
 
         for item in "${items[@]}"; do
-            IFS='|' read -r key name desc group <<< "$item"
+            IFS='|' read -r ikey name desc group <<< "$item"
 
             # Group separator
             if [[ -n "$group" && "$group" != "$current_group" ]]; then
                 current_group="$group"
-                echo -e "  ${DIM}── ${current_group} ──${NC}"
+                echo -e "  ${DIM}── ${current_group} ──${NC}" >/dev/tty
             elif [[ -z "$group" && -n "$current_group" ]]; then
                 current_group=""
-                echo -e "  ${DIM}──${NC}"
+                echo -e "  ${DIM}──${NC}" >/dev/tty
             fi
 
             # Item (highlighted if selected)
             if (( item_index == selected )); then
-                echo -e "  ${PURPLE}${BOLD}▸ ${name}${NC}"
+                echo -e "  ${PURPLE}${BOLD}▸ ${name}${NC}" >/dev/tty
             else
-                echo -e "    ${name}"
+                echo -e "    ${name}" >/dev/tty
             fi
 
-            (( item_index++ ))
+            (( item_index++ )) || true
         done
 
-        echo -e ""
-        echo -e "  ${DIM}↑↓ navigate  Enter select  q quit${NC}"
+        echo -e "" >/dev/tty
+        echo -e "  ${DIM}↑↓ navigate  Enter select  q quit${NC}" >/dev/tty
 
         # Read keypress
-        local key
-        IFS= read -rsn1 key
+        local input_char
+        IFS= read -rsn1 input_char </dev/tty
 
-        case "$key" in
+        case "$input_char" in
             $'\x1b')  # Escape sequence
-                read -rsn2 -t 0.1 key
-                case "$key" in
+                read -rsn2 -t 0.1 input_char </dev/tty
+                case "$input_char" in
                     '[A') (( selected > 0 )) && (( selected-- )) ;;          # Up
                     '[B') (( selected < count - 1 )) && (( selected++ )) ;;   # Down
                 esac
                 ;;
             '')  # Enter
                 IFS='|' read -r selected_key _ _ _ <<< "${items[$selected]}"
-                printf '\033[?25h'  # Show cursor
+                printf '\033[?25h' >/dev/tty
                 echo "$selected_key"
                 return 0
                 ;;
             'q'|'Q')
-                printf '\033[?25h'
+                printf '\033[?25h' >/dev/tty
                 echo "exit"
                 return 0
                 ;;
             [0-9])
                 # Number shortcuts: 1-9 map to items 0-8, 0 = last (exit)
                 local num_target
-                if [[ "$key" == "0" ]]; then
+                if [[ "$input_char" == "0" ]]; then
                     num_target=$(( count - 1 ))
                 else
-                    num_target=$(( key - 1 ))
+                    num_target=$(( input_char - 1 ))
                 fi
                 if (( num_target >= 0 && num_target < count )); then
                     selected=$num_target
                     IFS='|' read -r selected_key _ _ _ <<< "${items[$selected]}"
-                    printf '\033[?25h'
+                    printf '\033[?25h' >/dev/tty
                     echo "$selected_key"
                     return 0
                 fi
@@ -1086,11 +1077,24 @@ show_menu() {
             changelog)     SHOW_CHANGELOG=true; return 0 ;;
             history)       cat "$HISTORY_FILE" 2>/dev/null || echo "No update history yet."; continue ;;
             desktop)       CHECK_DESKTOP=true; return 0 ;;
-            help)          usage ;;
+            help)          ( usage ) 2>/dev/null; continue ;;
             exit|"")       exit 0 ;;
         esac
     done
 }
+
+# Interactive menu: show when no flags passed and running in a TTY
+_any_flag_set=false
+if $CHECK_ONLY || $NOTIFY || $FORCE || $SHOW_CHANGELOG || $QUIET || \
+   $DO_ROLLBACK || $SHOW_VERSIONS || $SKIP_CHECKSUM || $DRY_RUN || \
+   $CHECK_DESKTOP || $SHOW_WHATS_NEW || $SHOW_BRANCH || \
+   [[ -n "$SET_BRANCH" ]]; then
+    _any_flag_set=true
+fi
+
+if [[ "$SHOW_MENU" == true ]] || { [[ "$_any_flag_set" == false ]] && [[ -t 0 ]]; }; then
+    show_menu
+fi
 
 check_versions() {
     # Get installed version - ALWAYS check package.json first (source of truth)
