@@ -68,7 +68,11 @@ BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m'
 
-
+# ── Dynamic Box Width ────────────────────────────────────────────────────
+# Responsive to terminal size, clamped between 36-56 inner chars
+BOX_WIDTH=$(( $(tput cols 2>/dev/null || echo 80) - 6 ))
+(( BOX_WIDTH > 56 )) && BOX_WIDTH=56
+(( BOX_WIDTH < 36 )) && BOX_WIDTH=36
 
 # Flags
 CHECK_ONLY=false
@@ -265,21 +269,68 @@ check_flush() {
 }
 
 #──────────────────────────────────────────────────────────────────────────────
-# SUMMARY BOX
+# BOX RENDERING PRIMITIVES
 #──────────────────────────────────────────────────────────────────────────────
 
-# Pad a row to fit inside the summary box (42 chars inner width)
-pad_row() {
+# Strip ANSI escape codes to get visible character count
+strip_ansi() {
+    echo -e "$1" | sed 's/\x1b\[[0-9;]*m//g'
+}
+
+# Top border: ╭──── [optional title] ─╮
+box_top() {
+    local title="$1"
+    if [[ -n "$title" ]]; then
+        local visible
+        visible=$(strip_ansi "$title")
+        local title_len=${#visible}
+        local bar_len=$(( BOX_WIDTH - title_len - 4 ))
+        (( bar_len < 1 )) && bar_len=1
+        log "  ${INFO}╭─$(printf '─%.0s' $(seq 1 $bar_len)) ${NC}${title}${INFO} ─╮${NC}"
+    else
+        log "  ${INFO}╭$(printf '─%.0s' $(seq 1 $BOX_WIDTH))╮${NC}"
+    fi
+}
+
+# Bottom border: ╰──────────────────╯
+box_bottom() {
+    log "  ${INFO}╰$(printf '─%.0s' $(seq 1 $BOX_WIDTH))╯${NC}"
+}
+
+# Content row: │ content      │  (ANSI-safe padding)
+box_row() {
     local content="$1"
-    local width=38
-    # Strip ANSI codes to count visible chars
+    local inner_width=$(( BOX_WIDTH - 2 ))
     local visible
-    visible=$(echo -e "$content" | sed 's/\x1b\[[0-9;]*m//g')
+    visible=$(strip_ansi "$content")
     local vlen=${#visible}
-    local pad=$((width - vlen))
-    [[ $pad -lt 0 ]] && pad=0
+    local pad=$(( inner_width - vlen ))
+    (( pad < 0 )) && pad=0
     log "  ${INFO}│${NC} ${content}$(printf '%*s' "$pad" '') ${INFO}│${NC}"
 }
+
+# Empty row: │               │
+box_blank() {
+    log "  ${INFO}│${NC}$(printf '%*s' $(( BOX_WIDTH )) '')${INFO}│${NC}"
+}
+
+# Separator: ├── label ──────┤  or  ├──────────────┤
+box_sep() {
+    local label="$1"
+    if [[ -n "$label" ]]; then
+        local visible
+        visible=$(strip_ansi "$label")
+        local label_len=${#visible}
+        local bar_len=$(( BOX_WIDTH - label_len - 4 ))
+        (( bar_len < 1 )) && bar_len=1
+        log "  ${INFO}├── ${DIM}${label}${NC}${INFO} $(printf '─%.0s' $(seq 1 $bar_len))┤${NC}"
+    else
+        log "  ${INFO}├$(printf '─%.0s' $(seq 1 $BOX_WIDTH))┤${NC}"
+    fi
+}
+
+# Backward compat: pad_row is now an alias for box_row
+pad_row() { box_row "$@"; }
 
 summary_box() {
     local status="$1"  # "success" or "failure"
@@ -292,39 +343,39 @@ summary_box() {
     fi
 
     log ""
-    log "  ${INFO}╭──────────────────────────────────────╮${NC}"
+    box_top
 
     if [[ "$status" == "success" ]]; then
-        pad_row "${OK}${BOLD}✓ Update complete${NC}"
+        box_row "${OK}${BOLD}✓ Update complete${NC}"
     else
-        pad_row "${ERR}${BOLD}✗ Update failed${NC}"
+        box_row "${ERR}${BOLD}✗ Update failed${NC}"
     fi
 
-    log "  ${INFO}│${NC}$(printf '%*s' 39 '')${INFO}│${NC}"
-    pad_row "${ACCENT}Version${NC}   ${INSTALLED:-?} → ${LATEST}"
-    pad_row "${ACCENT}Method${NC}    ${UPDATE_METHOD:-Direct install}"
-    pad_row "${ACCENT}Duration${NC}  ${duration}"
+    box_blank
+    box_row "${ACCENT}Version${NC}   ${INSTALLED:-?} → ${LATEST}"
+    box_row "${ACCENT}Method${NC}    ${UPDATE_METHOD:-Direct install}"
+    box_row "${ACCENT}Duration${NC}  ${duration}"
 
     if [[ -n "$RETRIES_USED" ]]; then
-        pad_row "${ACCENT}Retries${NC}   ${RETRIES_USED}"
+        box_row "${ACCENT}Retries${NC}   ${RETRIES_USED}"
     fi
 
     # Wayland row (only on Wayland)
     if [[ -n "$WAYLAND_DISPLAY" ]]; then
-        pad_row "${ACCENT}Wayland${NC}   Configured"
+        box_row "${ACCENT}Wayland${NC}   Configured"
     fi
 
     # Desktop entry status
     if [[ -f "$USER_DESKTOP_FILE" ]]; then
-        pad_row "${ACCENT}Desktop${NC}   $(basename "$USER_DESKTOP_FILE")"
+        box_row "${ACCENT}Desktop${NC}   $(basename "$USER_DESKTOP_FILE")"
     fi
 
     # Rollback row (only on failure with rollback)
     if [[ "$status" == "failure" && -n "$2" ]]; then
-        pad_row "${ACCENT}Action${NC}    $2"
+        box_row "${ACCENT}Action${NC}    $2"
     fi
 
-    log "  ${INFO}╰──────────────────────────────────────╯${NC}"
+    box_bottom
     log ""
 }
 
@@ -1660,20 +1711,20 @@ fi
 # Dry-run mode: show what would happen without doing anything
 if [[ "$DRY_RUN" == true ]]; then
     log ""
-    log "  ${INFO}╭──────────────────────────────────────╮${NC}"
-    pad_row "${ACCENT}${BOLD}Dry run${NC} — no changes"
-    log "  ${INFO}│${NC}$(printf '%*s' 39 '')${INFO}│${NC}"
-    pad_row "${ACCENT}Version${NC}   ${INSTALLED:-unknown} → $LATEST"
+    box_top
+    box_row "${ACCENT}${BOLD}Dry run${NC} — no changes"
+    box_blank
+    box_row "${ACCENT}Version${NC}   ${INSTALLED:-unknown} → $LATEST"
     if [[ "$AUR" != "unknown" ]] && version_gte "$AUR" "$LATEST"; then
-        pad_row "${ACCENT}Method${NC}    AUR (yay)"
+        box_row "${ACCENT}Method${NC}    AUR (yay)"
     elif [[ "$AUR" != "unknown" ]]; then
-        pad_row "${ACCENT}Method${NC}    Direct install (AUR behind)"
+        box_row "${ACCENT}Method${NC}    Direct install (AUR behind)"
     else
-        pad_row "${ACCENT}Method${NC}    Direct install"
+        box_row "${ACCENT}Method${NC}    Direct install"
     fi
-    pad_row "${ACCENT}Pacman${NC}    $(if [[ "$PACMAN_TRACKED" == true ]]; then echo "tracked"; else echo "untracked"; fi)"
-    pad_row "${ACCENT}Backup${NC}    $BACKUP_DIR"
-    log "  ${INFO}╰──────────────────────────────────────╯${NC}"
+    box_row "${ACCENT}Pacman${NC}    $(if [[ "$PACMAN_TRACKED" == true ]]; then echo "tracked"; else echo "untracked"; fi)"
+    box_row "${ACCENT}Backup${NC}    $BACKUP_DIR"
+    box_bottom
     log ""
     hint "Run without --dry-run to perform the update."
     log_event "DRY_RUN from=${INSTALLED:-unknown} to=$LATEST"
