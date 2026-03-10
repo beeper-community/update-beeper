@@ -249,6 +249,17 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Interactive menu: show when no flags passed and running in a TTY
+_any_flag_set=false
+$CHECK_ONLY || $NOTIFY || $FORCE || $SHOW_CHANGELOG || $QUIET || \
+$DO_ROLLBACK || $SHOW_VERSIONS || $SKIP_CHECKSUM || $DRY_RUN || \
+$CHECK_DESKTOP || $SHOW_WHATS_NEW || $SHOW_BRANCH || \
+[[ -n "$SET_BRANCH" ]] && _any_flag_set=true
+
+if [[ "$SHOW_MENU" == true ]] || { [[ "$_any_flag_set" == false ]] && [[ -t 0 ]]; }; then
+    show_menu
+fi
+
 cleanup() {
     sudo_keepalive_stop
     rm -rf "$TMP_DIR" 2>/dev/null || true
@@ -758,6 +769,148 @@ show_whats_new() {
     box_bottom
     log ""
     return 0
+}
+
+#──────────────────────────────────────────────────────────────────────────────
+# INTERACTIVE MENU SYSTEM
+#──────────────────────────────────────────────────────────────────────────────
+
+# Menu items: key|display_name|description|group
+MENU_ITEMS=(
+    "update|Update Beeper|Install latest from current branch|Actions"
+    "switch-branch|Switch branch|Change between stable and nightly|Actions"
+    "rollback|Rollback|Restore previous backup|Actions"
+    "dry-run|Dry run|Preview update without changes|Actions"
+    "check|Check for updates|Compare installed vs latest|Information"
+    "branch-status|Branch status|Versions across all branches|Information"
+    "whats-new|What's new|Changes since installed version|Information"
+    "changelog|Show changelog|Full version history|Information"
+    "history|Show update history|Past update log|Information"
+    "desktop|Validate desktop|Check shortcut, icon, desktop entry|Maintenance"
+    "help|Help|Show all flags and usage|"
+    "exit|Exit||"
+)
+
+# Pure bash arrow-key menu selector
+# Returns selected key via stdout
+menu_bash() {
+    local items=("${MENU_ITEMS[@]}")
+    local count=${#items[@]}
+    local selected=0
+    local current_group=""
+
+    # Hide cursor
+    printf '\033[?25l'
+    # Restore cursor on exit
+    trap 'printf "\033[?25h"' RETURN
+
+    while true; do
+        # Move cursor to top of menu area
+        if [[ -n "$_menu_drawn" ]]; then
+            # Move up to redraw
+            local total_lines=$(( count + 10 ))  # items + separators + header/footer
+            printf "\033[${total_lines}A"
+        fi
+        _menu_drawn=1
+
+        # Header
+        local branch_badge=""
+        [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" ${INFO}[${ACTIVE_BRANCH}]${NC}"
+        echo -e ""
+        echo -e "  ${PURPLE}${BOLD}🐝 Beeper Updater${NC} ${INFO}v${SCRIPT_VERSION}${NC}${branch_badge}"
+        echo -e ""
+
+        current_group=""
+        local item_index=0
+
+        for item in "${items[@]}"; do
+            IFS='|' read -r key name desc group <<< "$item"
+
+            # Group separator
+            if [[ -n "$group" && "$group" != "$current_group" ]]; then
+                current_group="$group"
+                echo -e "  ${DIM}── ${current_group} ──${NC}"
+            elif [[ -z "$group" && -n "$current_group" ]]; then
+                current_group=""
+                echo -e "  ${DIM}──${NC}"
+            fi
+
+            # Item (highlighted if selected)
+            if (( item_index == selected )); then
+                echo -e "  ${PURPLE}${BOLD}▸ ${name}${NC}"
+            else
+                echo -e "    ${name}"
+            fi
+
+            (( item_index++ ))
+        done
+
+        echo -e ""
+        echo -e "  ${DIM}↑↓ navigate  Enter select  q quit${NC}"
+
+        # Read keypress
+        local key
+        IFS= read -rsn1 key
+
+        case "$key" in
+            $'\x1b')  # Escape sequence
+                read -rsn2 -t 0.1 key
+                case "$key" in
+                    '[A') (( selected > 0 )) && (( selected-- )) ;;          # Up
+                    '[B') (( selected < count - 1 )) && (( selected++ )) ;;   # Down
+                esac
+                ;;
+            '')  # Enter
+                IFS='|' read -r selected_key _ _ _ <<< "${items[$selected]}"
+                printf '\033[?25h'  # Show cursor
+                echo "$selected_key"
+                return 0
+                ;;
+            'q'|'Q')
+                printf '\033[?25h'
+                echo "exit"
+                return 0
+                ;;
+            [0-9])
+                # Number shortcuts: 1-9 map to items 0-8, 0 = last (exit)
+                local num_target
+                if [[ "$key" == "0" ]]; then
+                    num_target=$(( count - 1 ))
+                else
+                    num_target=$(( key - 1 ))
+                fi
+                if (( num_target >= 0 && num_target < count )); then
+                    selected=$num_target
+                    IFS='|' read -r selected_key _ _ _ <<< "${items[$selected]}"
+                    printf '\033[?25h'
+                    echo "$selected_key"
+                    return 0
+                fi
+                ;;
+        esac
+    done
+}
+
+# Main menu loop (bash-only for now; backends added in next commit)
+show_menu() {
+    while true; do
+        local selected
+        selected=$(menu_bash)
+
+        case "$selected" in
+            update)        return 0 ;;  # Continue to main update flow
+            rollback)      DO_ROLLBACK=true; return 0 ;;
+            dry-run)       DRY_RUN=true; return 0 ;;
+            check)         CHECK_ONLY=true; return 0 ;;
+            branch-status) SHOW_VERSIONS=true; return 0 ;;
+            whats-new)     SHOW_WHATS_NEW=true; return 0 ;;
+            changelog)     SHOW_CHANGELOG=true; return 0 ;;
+            history)       cat "$HISTORY_FILE" 2>/dev/null || echo "No update history yet."; continue ;;
+            desktop)       CHECK_DESKTOP=true; return 0 ;;
+            help)          usage ;;
+            exit|"")       exit 0 ;;
+        esac
+    done
 }
 
 check_versions() {
@@ -1896,12 +2049,6 @@ fi
 if [[ "$SHOW_WHATS_NEW" == true ]]; then
     show_whats_new
     exit $?
-fi
-
-# Handle interactive menu (early exit — implemented in Tasks 5-6)
-if [[ "$SHOW_MENU" == true ]]; then
-    echo "Interactive menu: not yet implemented (coming in v1.9.0)"
-    exit 0
 fi
 
 # Handle versions display (early exit)
