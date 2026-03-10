@@ -1249,6 +1249,100 @@ install_icon() {
     return 0
 }
 
+validate_desktop_entry() {
+    local errors=0
+
+    check_reset
+
+    # 1. Desktop file exists
+    if [[ -f "$USER_DESKTOP_FILE" ]]; then
+        check_add "desktop file" "pass"
+    else
+        check_add "desktop file" "fail" "not found: $USER_DESKTOP_FILE"
+        check_flush
+        return 1
+    fi
+
+    # 2. Exec binary resolves
+    local exec_line
+    exec_line=$(grep -m1 '^Exec=' "$USER_DESKTOP_FILE" | sed 's/^Exec=//' | awk '{print $1}')
+    if [[ -x "$exec_line" ]]; then
+        check_add "exec binary" "pass"
+    else
+        # Check if it's in PATH
+        if command -v "$exec_line" &>/dev/null; then
+            check_add "exec binary" "pass"
+        else
+            check_add "exec binary" "fail" "not found: $exec_line"
+            errors=$((errors + 1))
+        fi
+    fi
+
+    # 3. Exec binary points to correct version
+    local desktop_version installed_version
+    desktop_version=$(grep -oP 'X-AppImage-Version=\K.*' "$USER_DESKTOP_FILE" 2>/dev/null)
+    installed_version=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' \
+        "$INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1)
+
+    if [[ -n "$desktop_version" ]] && [[ -n "$installed_version" ]]; then
+        if [[ "$desktop_version" == "$installed_version" ]]; then
+            check_add "version match" "pass"
+        else
+            check_add "version match" "warn" "desktop=$desktop_version installed=$installed_version"
+        fi
+    elif [[ -z "$desktop_version" ]]; then
+        check_add "version match" "warn" "no version metadata in desktop file"
+    fi
+
+    # 4. Icon resolves
+    local icon_name
+    icon_name=$(grep -m1 '^Icon=' "$USER_DESKTOP_FILE" | sed 's/^Icon=//')
+    if [[ -n "$icon_name" ]]; then
+        if echo "$icon_name" | grep -q '/'; then
+            # Absolute path
+            if [[ -f "$icon_name" ]]; then
+                check_add "icon" "pass"
+            else
+                check_add "icon" "fail" "path not found: $icon_name"
+                errors=$((errors + 1))
+            fi
+        else
+            # Theme name — check hicolor
+            local found_icon=false
+            for size_dir in "$USER_ICON_DIR" "$HOME/.local/share/icons/hicolor"/*/apps /usr/share/icons/hicolor/*/apps; do
+                if [[ -f "$size_dir/$icon_name.png" ]] || [[ -f "$size_dir/$icon_name.svg" ]]; then
+                    found_icon=true
+                    break
+                fi
+            done
+            if [[ "$found_icon" == true ]]; then
+                check_add "icon" "pass"
+            else
+                check_add "icon" "warn" "\"$icon_name\" not found in icon theme — run update-beeper to install"
+                errors=$((errors + 1))
+            fi
+        fi
+    fi
+
+    # 5. No stale duplicates
+    local stale_count=0
+    for f in "$USER_DESKTOP_DIR/beeper.desktop" "$USER_DESKTOP_DIR/beepertexts.desktop"; do
+        if [[ -f "$f" ]]; then
+            stale_count=$((stale_count + 1))
+        fi
+    done
+    if [[ $stale_count -gt 0 ]]; then
+        check_add "stale files" "warn" "$stale_count stale Beeper desktop file(s) found"
+    fi
+
+    check_flush
+
+    if [[ $errors -gt 0 ]]; then
+        return 1
+    fi
+    return 0
+}
+
 #──────────────────────────────────────────────────────────────────────────────
 # MAIN UPDATE LOGIC WITH SELF-HEALING
 #──────────────────────────────────────────────────────────────────────────────
