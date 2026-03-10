@@ -1,17 +1,48 @@
 #!/bin/bash
 # beeper-health - Monitor Beeper and restart if unresponsive
+# Flags: --desktop (validate desktop shortcut via update-beeper)
 
 set -e
 
 # Colors for terminal output
 RED='\033[0;31m'
+GREEN='\033[0;32m'
 NC='\033[0m'
 
 BEEPER_WAYLAND=~/bin/beeper-wayland
 LOG_FILE=/tmp/beeper-health.log
+UPDATE_BEEPER="$HOME/.local/bin/update-beeper"
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+
+# Parse args
+CHECK_DESKTOP=false
+for arg in "$@"; do
+    case "$arg" in
+        --desktop) CHECK_DESKTOP=true ;;
+        --help|-h)
+            echo "Usage: beeper-health [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --desktop    Validate desktop shortcut and icon"
+            echo "  --help, -h   Show this help"
+            echo ""
+            echo "Without flags: checks if Beeper is responsive, restarts if not."
+            exit 0
+            ;;
+    esac
+done
+
+# Desktop validation (delegates to update-beeper)
+if [[ "$CHECK_DESKTOP" == true ]]; then
+    if [[ -x "$UPDATE_BEEPER" ]]; then
+        exec "$UPDATE_BEEPER" --check-desktop
+    else
+        echo -e "${RED}Error: update-beeper not found at $UPDATE_BEEPER${NC}" >&2
+        exit 1
+    fi
+fi
 
 check_beeper_responsive() {
     # Check if hyprctl is available (Hyprland-specific)
