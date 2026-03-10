@@ -312,6 +312,11 @@ summary_box() {
         pad_row "${ACCENT}Wayland${NC}   Configured"
     fi
 
+    # Desktop entry status
+    if [[ -f "$USER_DESKTOP_FILE" ]]; then
+        pad_row "${ACCENT}Desktop${NC}   $(basename "$USER_DESKTOP_FILE")"
+    fi
+
     # Rollback row (only on failure with rollback)
     if [[ "$status" == "failure" && -n "$2" ]]; then
         pad_row "${ACCENT}Action${NC}    $2"
@@ -1477,6 +1482,7 @@ do_direct_install() {
 
     setup_wayland_desktop_override
     install_icon
+    validate_desktop_entry
 
     # Phase 8: Verifying startup
     next_phase "Verifying startup"
