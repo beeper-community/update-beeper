@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_VERSION="1.8.0"
 LOCKFILE="/tmp/update-beeper.lock"
-BEEPER_API="https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop"
+# BEEPER_API is set dynamically after branch config is read (see ACTIVE_BRANCH)
 CHANGELOG_URL="https://www.beeper.com/changelog/desktop"
 INSTALL_DIR="/opt/beeper"
 BACKUP_DIR="/opt/beeper-backups"
@@ -30,6 +30,31 @@ CHECKSUM_CACHE="$HOME/.cache/update-beeper/checksums.txt"
 # Persistent log and update history
 LOG_FILE="$HOME/.local/share/update-beeper/update-beeper.log"
 HISTORY_FILE="$HOME/.local/share/update-beeper/update-history.log"
+
+# Branch configuration
+BRANCH_CONFIG_DIR="$HOME/.config/update-beeper"
+BRANCH_CONFIG_FILE="$BRANCH_CONFIG_DIR/config"
+BEEPER_API_TEMPLATE="https://api.beeper.com/desktop/download/linux/x64/%s/com.automattic.beeper.desktop"
+
+read_config_branch() {
+    if [[ -f "$BRANCH_CONFIG_FILE" ]]; then
+        local branch
+        branch=$(grep -oP '^BRANCH=\K\S+' "$BRANCH_CONFIG_FILE" 2>/dev/null)
+        if [[ "$branch" =~ ^(stable|nightly|beta)$ ]]; then
+            echo "$branch"
+            return
+        fi
+    fi
+    echo "stable"
+}
+
+write_config_branch() {
+    mkdir -p "$BRANCH_CONFIG_DIR"
+    echo "BRANCH=$1" > "$BRANCH_CONFIG_FILE"
+}
+
+ACTIVE_BRANCH=$(read_config_branch)
+BEEPER_API=$(printf "$BEEPER_API_TEMPLATE" "$ACTIVE_BRANCH")
 
 # Minimum required free space (500MB for download + extraction + buffer)
 MIN_FREE_SPACE_MB=500
@@ -86,6 +111,10 @@ SHOW_VERSIONS=false
 SKIP_CHECKSUM=false
 DRY_RUN=false
 CHECK_DESKTOP=false
+SHOW_WHATS_NEW=false
+SHOW_MENU=false
+SET_BRANCH=""
+SHOW_BRANCH=false
 
 # Track which backup to use for rollback
 ROLLBACK_BACKUP=""
@@ -106,6 +135,9 @@ usage() {
     echo "  --check-desktop   Validate Beeper desktop shortcut and icon"
     echo "  --rollback, -r    Rollback to previous backup version"
     echo "  --version, -v     Show script version"
+    echo "  --branch [NAME]   Set or show active branch (stable, nightly)"
+    echo "  --whats-new, -w   Show changes since installed version"
+    echo "  --menu, -m        Force interactive menu"
     echo "  --help, -h        Show this help message"
     echo ""
     echo "Beeper will automatically restart after updating."
@@ -141,6 +173,17 @@ while [[ $# -gt 0 ]]; do
         --rollback|-r) DO_ROLLBACK=true; shift ;;
         --version|-v) show_version ;;
         --help|-h) usage ;;
+        --branch)
+            if [[ -n "${2:-}" ]] && [[ "$2" =~ ^(stable|nightly|beta)$ ]]; then
+                SET_BRANCH="$2"; shift 2
+            elif [[ -n "${2:-}" ]] && [[ "$2" != --* ]]; then
+                echo "Unknown branch: $2 (valid: stable, nightly)"; exit 1
+            else
+                SHOW_BRANCH=true; shift
+            fi
+            ;;
+        --whats-new|-w) SHOW_WHATS_NEW=true; shift ;;
+        --menu|-m) SHOW_MENU=true; shift ;;
         *) echo "Unknown option: $1"; usage ;;
     esac
 done
@@ -693,30 +736,26 @@ show_versions() {
 
     print_header
     log ""
-    log "  ${ACCENT}Installed${NC}  ${BOLD}${INSTALLED:-unknown}${NC}"
-    log "  ${ACCENT}Latest${NC}     ${BOLD}${LATEST:-unknown}${NC}"
-    log "  ${ACCENT}AUR${NC}        ${INFO}${AUR:-unknown}${NC}"
-    if [[ "$PACMAN_TRACKED" == true ]]; then
-        log "  ${ACCENT}Pacman${NC}     ${OK}tracked${NC}"
-    else
-        log "  ${ACCENT}Pacman${NC}     ${WARN}untracked${NC}"
-    fi
-    log ""
+    box_top "${ACTIVE_BRANCH}"
+    box_row "${ACCENT}Active branch${NC}   ${BOLD}${ACTIVE_BRANCH}${NC}"
+    box_row "${ACCENT}Installed${NC}       ${BOLD}${INSTALLED:-unknown}${NC}"
+    box_blank
 
-    if [[ -n "$INSTALLED" ]] && [[ "$INSTALLED" != "unknown" ]] && \
-       [[ -n "$LATEST" ]] && [[ "$LATEST" != "unknown" ]]; then
+    # Show current branch latest
+    if [[ -n "$INSTALLED" && "$INSTALLED" != "unknown" && -n "$LATEST" && "$LATEST" != "unknown" ]]; then
         if version_gte "$INSTALLED" "$LATEST"; then
-            pass "On the latest version"
+            box_row "${ACCENT}${ACTIVE_BRANCH}${NC}$(printf '%*s' $((14 - ${#ACTIVE_BRANCH})) '')${BOLD}${LATEST}${NC}  ${OK}✓ up to date${NC}"
         else
-            warn "Update available: $INSTALLED → $LATEST"
+            box_row "${ACCENT}${ACTIVE_BRANCH}${NC}$(printf '%*s' $((14 - ${#ACTIVE_BRANCH})) '')${BOLD}${LATEST}${NC}  ${WARN}⬆ update available${NC}"
         fi
+    else
+        box_row "${ACCENT}${ACTIVE_BRANCH}${NC}$(printf '%*s' $((14 - ${#ACTIVE_BRANCH})) '')${BOLD}${LATEST:-unknown}${NC}"
     fi
 
-    if [[ -n "$AUR" ]] && [[ "$AUR" != "unknown" ]] && \
-       [[ -n "$LATEST" ]] && [[ "$LATEST" != "unknown" ]] && \
-       ! version_gte "$AUR" "$LATEST"; then
-        hint "AUR is behind (update-beeper uses direct download)"
-    fi
+    box_blank
+    box_row "${ACCENT}AUR${NC}             ${INFO}${AUR:-unknown}${NC}"
+    box_row "${ACCENT}Pacman${NC}          $(if [[ "$PACMAN_TRACKED" == true ]]; then echo -e "${OK}tracked${NC}"; else echo -e "${WARN}untracked${NC}"; fi)"
+    box_bottom
     log ""
 
     exit 0
@@ -1623,6 +1662,27 @@ check_system_compatibility
 if [[ "$SHOW_CHANGELOG" == true ]]; then
     show_changelog
     exit $?
+fi
+
+# Handle branch set/show (early exit)
+if [[ -n "$SET_BRANCH" ]]; then
+    old_branch="$ACTIVE_BRANCH"
+    write_config_branch "$SET_BRANCH"
+    ACTIVE_BRANCH="$SET_BRANCH"
+    BEEPER_API=$(printf "$BEEPER_API_TEMPLATE" "$ACTIVE_BRANCH")
+    print_header
+    if [[ "$old_branch" == "$SET_BRANCH" ]]; then
+        pass "Already on ${BOLD}${SET_BRANCH}${NC} branch"
+    else
+        pass "Switched from ${BOLD}${old_branch}${NC} to ${BOLD}${SET_BRANCH}${NC}"
+    fi
+    log ""
+    exit 0
+fi
+
+if [[ "$SHOW_BRANCH" == true ]]; then
+    echo "$ACTIVE_BRANCH"
+    exit 0
 fi
 
 # Handle versions display (early exit)
