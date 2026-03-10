@@ -56,6 +56,67 @@ write_config_branch() {
 ACTIVE_BRANCH=$(read_config_branch)
 BEEPER_API="${BEEPER_API_TEMPLATE/\%s/$ACTIVE_BRANCH}"
 
+#──────────────────────────────────────────────────────────────────────────────
+# DATA FETCHING & CACHING (beeper-intel)
+#──────────────────────────────────────────────────────────────────────────────
+
+INTEL_RAW_URL="https://raw.githubusercontent.com/robertogogoni/beeper-intel/main/data"
+CACHE_DIR="$HOME/.cache/update-beeper"
+CACHE_TTL_SECONDS=21600  # 6 hours
+
+# Ensure cache directory exists
+mkdir -p "$CACHE_DIR" 2>/dev/null || true
+
+# Fetch data with local cache. Returns cached content if within TTL.
+# Usage: fetch_cached_data "branch-versions"  →  prints JSON to stdout
+fetch_cached_data() {
+    local name="$1"
+    local cache_file="$CACHE_DIR/${name}.json"
+    local url="${INTEL_RAW_URL}/${name}.json"
+
+    # Check cache freshness
+    if [[ -f "$cache_file" ]]; then
+        local cache_age=$(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0) ))
+        if (( cache_age < CACHE_TTL_SECONDS )); then
+            cat "$cache_file"
+            return 0
+        fi
+    fi
+
+    # Fetch fresh data
+    local data
+    data=$(curl -sL -m 10 "$url" 2>/dev/null)
+    if [[ -n "$data" ]] && echo "$data" | head -c1 | grep -q '{'; then
+        echo "$data" > "$cache_file"
+        echo "$data"
+        return 0
+    fi
+
+    # Fallback to stale cache
+    if [[ -f "$cache_file" ]]; then
+        cat "$cache_file"
+        return 0
+    fi
+
+    return 1
+}
+
+# Get human-readable cache age for display
+cache_age_display() {
+    local name="$1"
+    local cache_file="$CACHE_DIR/${name}.json"
+    if [[ -f "$cache_file" ]]; then
+        local age=$(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0) ))
+        if (( age < 60 )); then echo "just now"
+        elif (( age < 3600 )); then echo "$((age / 60))m ago"
+        elif (( age < 86400 )); then echo "$((age / 3600))h ago"
+        else echo "$((age / 86400))d ago"
+        fi
+    else
+        echo "never"
+    fi
+}
+
 # Minimum required free space (500MB for download + extraction + buffer)
 MIN_FREE_SPACE_MB=500
 
