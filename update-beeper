@@ -13,6 +13,9 @@ BACKUP_DIR="/opt/beeper-backups"
 TMP_DIR="/tmp/beeper-update"
 BEEPER_CONFIG="$HOME/.config/BeeperTexts"
 USER_DESKTOP_DIR="$HOME/.local/share/applications"
+USER_DESKTOP_FILE="$USER_DESKTOP_DIR/beeper-wayland.desktop"
+BUNDLED_DESKTOP="$INSTALL_DIR/beepertexts.desktop"
+USER_ICON_DIR="$HOME/.local/share/icons/hicolor/512x512/apps"
 
 # Wayland flags for native rendering (fixes blank windows on Hyprland/Sway)
 # --disable-gpu-compositing prevents blank screen after sleep/wake cycles
@@ -1135,6 +1138,20 @@ install_files() {
     return 0
 }
 
+cleanup_stale_desktop_files() {
+    local stale_files=(
+        "$USER_DESKTOP_DIR/beeper.desktop"
+        "$USER_DESKTOP_DIR/beepertexts.desktop"
+    )
+
+    for f in "${stale_files[@]}"; do
+        if [[ -f "$f" ]]; then
+            rm -f "$f"
+            detail "Removed stale: $(basename "$f")"
+        fi
+    done
+}
+
 setup_wayland_desktop_override() {
     if [[ -z "$WAYLAND_DISPLAY" ]]; then
         return 0
@@ -1142,20 +1159,70 @@ setup_wayland_desktop_override() {
 
     mkdir -p "$USER_DESKTOP_DIR"
 
-    local system_desktop="/usr/share/applications/beeper.desktop"
-    local user_desktop="$USER_DESKTOP_DIR/beeper.desktop"
+    # Source: bundled desktop file from AppImage extraction
+    local source_desktop="$BUNDLED_DESKTOP"
 
-    if [[ ! -f "$system_desktop" ]]; then
-        warn "System desktop file not found, skipping Wayland override"
-        return 0
+    if [[ ! -f "$source_desktop" ]]; then
+        # Fallback: generate from scratch
+        source_desktop=""
     fi
 
-    cp "$system_desktop" "$user_desktop"
-    sed -i "s|^Exec=beeper |Exec=beeper $WAYLAND_FLAGS |" "$user_desktop"
-    sed -i "s|^Exec=/opt/beeper/beepertexts |Exec=/opt/beeper/beepertexts $WAYLAND_FLAGS |" "$user_desktop"
+    # Determine Exec line based on wrapper script
+    local exec_path="/opt/beeper/beepertexts"
+    local exec_line
+
+    if [[ -x "$HOME/bin/beeper-wayland" ]]; then
+        # User has a custom wrapper — point to it
+        exec_line="$HOME/bin/beeper-wayland %U"
+    else
+        # No wrapper — use binary directly with Wayland flags
+        exec_line="$exec_path $WAYLAND_FLAGS --no-sandbox %U"
+    fi
+
+    if [[ -n "$source_desktop" ]]; then
+        cp "$source_desktop" "$USER_DESKTOP_FILE"
+        # Update Exec line
+        sed -i "s|^Exec=.*|Exec=$exec_line|" "$USER_DESKTOP_FILE"
+        # Update Name
+        sed -i "s|^Name=.*|Name=Beeper|" "$USER_DESKTOP_FILE"
+        # Ensure proper MIME types
+        sed -i "s|^MimeType=.*|MimeType=x-scheme-handler/beeper;x-scheme-handler/matrix;x-scheme-handler/element;|" "$USER_DESKTOP_FILE"
+    else
+        # Generate desktop file from scratch
+        cat > "$USER_DESKTOP_FILE" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Beeper
+GenericName=Unified Messenger
+Comment=The ultimate messaging app (Wayland optimized)
+Exec=$exec_line
+Icon=beepertexts
+Terminal=false
+StartupWMClass=BeeperTexts
+MimeType=x-scheme-handler/beeper;x-scheme-handler/matrix;x-scheme-handler/element;
+Categories=Network;InstantMessaging;
+Keywords=chat;messaging;whatsapp;telegram;discord;
+DESKTOP
+    fi
+
+    # Update version metadata
+    local installed_version
+    installed_version=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' \
+        "$INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1)
+    if [[ -n "$installed_version" ]]; then
+        if grep -q '^X-AppImage-Version=' "$USER_DESKTOP_FILE"; then
+            sed -i "s|^X-AppImage-Version=.*|X-AppImage-Version=$installed_version|" "$USER_DESKTOP_FILE"
+        else
+            echo "X-AppImage-Version=$installed_version" >> "$USER_DESKTOP_FILE"
+        fi
+    fi
+
+    # Clean up stale desktop files
+    cleanup_stale_desktop_files
+
     update-desktop-database "$USER_DESKTOP_DIR" 2>/dev/null || true
 
-    pass "Wayland desktop override configured"
+    pass "Desktop entry configured ($USER_DESKTOP_FILE)"
     return 0
 }
 
