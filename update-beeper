@@ -1113,7 +1113,7 @@ fix_and_retry() {
 backup_current() {
     if [[ -d "$INSTALL_DIR" ]]; then
         sudo mkdir -p "$BACKUP_DIR"
-        ROLLBACK_BACKUP="beeper-backup-$(date +%Y%m%d-%H%M%S)"
+        ROLLBACK_BACKUP="beeper-backup-${INSTALLED}-${ACTIVE_BRANCH}"
         action "Creating backup: $ROLLBACK_BACKUP"
         sudo cp -a "$INSTALL_DIR" "$BACKUP_DIR/$ROLLBACK_BACKUP"
 
