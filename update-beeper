@@ -4,7 +4,7 @@
 
 set -e
 
-SCRIPT_VERSION="1.7.0"
+SCRIPT_VERSION="1.8.0"
 LOCKFILE="/tmp/update-beeper.lock"
 BEEPER_API="https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop"
 CHANGELOG_URL="https://www.beeper.com/changelog/desktop"
@@ -109,8 +109,10 @@ usage() {
     echo ""
     echo "Wayland Support:"
     echo "  On Wayland (Hyprland, Sway, etc.), this script automatically:"
-    echo "  - Tests Beeper with native Wayland flags (fixes blank windows)"
-    echo "  - Creates ~/.local/share/applications/beeper.desktop override"
+    echo "  - Creates ~/.local/share/applications/beeper-wayland.desktop"
+    echo "  - Installs icon to hicolor theme for launcher display"
+    echo "  - Validates desktop entry points to correct binary and version"
+    echo "  - Cleans up stale Beeper shortcuts"
     exit 0
 }
 
