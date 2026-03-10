@@ -611,7 +611,7 @@ show_changelog() {
     # Parse and display changelog entries
     local output=""
     local count
-    count=$(echo "$data" | jq '.versions | length')
+    count=$(echo "$data" | jq '.versions | length // 0' 2>/dev/null) || count=0
 
     print_header
     log "  ${ACCENT}${BOLD}Changelog${NC} — ${INFO}${count} versions${NC}  ${DIM}(checked $(cache_age_display "desktop-changelog"))${NC}"
@@ -620,14 +620,14 @@ show_changelog() {
     local i=0
     while (( i < count )); do
         local ver date
-        ver=$(echo "$data" | jq -r ".versions[$i].version")
+        ver=$(echo "$data" | jq -r ".versions[$i].version" | sed 's/^v//')
         date=$(echo "$data" | jq -r ".versions[$i].date // \"\"")
 
         log "  ${BOLD}${ver}${NC}${date:+ ${DIM}(${date})${NC}}"
 
         # New features
         local feat_count
-        feat_count=$(echo "$data" | jq ".versions[$i].new_features | length")
+        feat_count=$(echo "$data" | jq ".versions[$i].new_features | length // 0" 2>/dev/null) || feat_count=0
         local f=0
         while (( f < feat_count )); do
             local feat
@@ -638,7 +638,7 @@ show_changelog() {
 
         # Fixes
         local fix_count
-        fix_count=$(echo "$data" | jq ".versions[$i].fixes | length")
+        fix_count=$(echo "$data" | jq ".versions[$i].fixes | length // 0" 2>/dev/null) || fix_count=0
         local x=0
         while (( x < fix_count )); do
             local fix
@@ -699,7 +699,7 @@ show_whats_new() {
     if [[ -n "$changelog" ]] && command -v jq &>/dev/null; then
         local features=() fixes=() versions_spanned=0
         local count
-        count=$(echo "$changelog" | jq '.versions | length')
+        count=$(echo "$changelog" | jq '.versions | length // 0' 2>/dev/null) || count=0
 
         local i=0
         while (( i < count )); do
@@ -710,7 +710,7 @@ show_whats_new() {
                 (( versions_spanned++ ))
 
                 local feat_count
-                feat_count=$(echo "$changelog" | jq ".versions[$i].new_features | length")
+                feat_count=$(echo "$changelog" | jq ".versions[$i].new_features | length // 0" 2>/dev/null) || feat_count=0
                 local f=0
                 while (( f < feat_count )); do
                     features+=("$(echo "$changelog" | jq -r ".versions[$i].new_features[$f]")")
@@ -718,7 +718,7 @@ show_whats_new() {
                 done
 
                 local fix_count
-                fix_count=$(echo "$changelog" | jq ".versions[$i].fixes | length")
+                fix_count=$(echo "$changelog" | jq ".versions[$i].fixes | length // 0" 2>/dev/null) || fix_count=0
                 local x=0
                 while (( x < fix_count )); do
                     fixes+=("$(echo "$changelog" | jq -r ".versions[$i].fixes[$x]")")
