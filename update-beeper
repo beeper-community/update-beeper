@@ -1168,7 +1168,7 @@ setup_wayland_desktop_override() {
     fi
 
     # Determine Exec line based on wrapper script
-    local exec_path="/opt/beeper/beepertexts"
+    local exec_path="$INSTALL_DIR/beepertexts"
     local exec_line
 
     if [[ -x "$HOME/bin/beeper-wayland" ]]; then
