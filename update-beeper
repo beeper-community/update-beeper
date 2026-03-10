@@ -81,6 +81,7 @@ SCRIPT_EXIT_CODE=0
 SHOW_VERSIONS=false
 SKIP_CHECKSUM=false
 DRY_RUN=false
+CHECK_DESKTOP=false
 
 # Track which backup to use for rollback
 ROLLBACK_BACKUP=""
@@ -98,6 +99,7 @@ usage() {
     echo "  --skip-checksum   Skip SHA256 checksum verification (for forced re-downloads)"
     echo "  --dry-run         Show what would happen without making changes"
     echo "  --history         Show update history"
+    echo "  --check-desktop   Validate Beeper desktop shortcut and icon"
     echo "  --rollback, -r    Rollback to previous backup version"
     echo "  --version, -v     Show script version"
     echo "  --help, -h        Show this help message"
@@ -129,6 +131,7 @@ while [[ $# -gt 0 ]]; do
         --skip-checksum) SKIP_CHECKSUM=true; shift ;;
         --dry-run) DRY_RUN=true; shift ;;
         --history) cat "$HISTORY_FILE" 2>/dev/null || echo "No update history yet."; exit 0 ;;
+        --check-desktop) CHECK_DESKTOP=true; shift ;;
         --rollback|-r) DO_ROLLBACK=true; shift ;;
         --version|-v) show_version ;;
         --help|-h) usage ;;
@@ -1566,6 +1569,14 @@ fi
 # Handle versions display (early exit)
 if [[ "$SHOW_VERSIONS" == true ]]; then
     show_versions
+fi
+
+# Handle desktop validation (early exit)
+if [[ "$CHECK_DESKTOP" == true ]]; then
+    print_header
+    phase 1 1 "Desktop entry validation"
+    validate_desktop_entry
+    exit $?
 fi
 
 # Handle manual rollback request
