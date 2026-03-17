@@ -472,29 +472,57 @@ check_versions() {
         INSTALLED=$(pacman -Q beeper-v4-bin 2>/dev/null | awk '{print $2}' | cut -d'-' -f1)
     fi
 
-    # Get latest version from API (SINGLE curl call for both status + URL)
-    # Sets globals: DOWNLOAD_URL, LATEST, AUR
-    local api_response
-    api_response=$(curl -Ls -m 10 -o /dev/null -w "%{http_code}\n%{url_effective}" "$BEEPER_API" 2>/dev/null)
-    local http_status
-    http_status=$(echo "$api_response" | head -1)
-    DOWNLOAD_URL=$(echo "$api_response" | tail -1)
+    # Resolve latest version from Beeper API redirect chain.
+    # The API returns a 302 redirect to a CDN URL with the version in the filename.
+    # We use progressive strategies to get that URL without downloading the ~200MB AppImage.
+    # Each strategy is faster but less compatible; fallback ensures resilience.
+    DOWNLOAD_URL=""
+    LATEST="unknown"
 
-    if [[ "$http_status" != "200" ]] && [[ "$http_status" != "302" ]] && [[ "$http_status" != "301" ]]; then
-        echo -e "${ERR}    ✗ Beeper API returned HTTP $http_status${NC}" >&2
+    # Strategy 1: HEAD request — get Location header without following redirect (~0.7s)
+    # HTTP-correct: zero body transfer. Only works for single-hop redirects;
+    # the Beeper-* guard safely rejects intermediate URLs if multi-hop.
+    local headers
+    headers=$(curl -sI -m 10 "$BEEPER_API" 2>/dev/null) || true
+    if [[ -n "$headers" ]]; then
+        local location
+        location=$(echo "$headers" | grep -i '^location:' | head -1 | sed -E 's/^[^:]+:[[:space:]]*//' | tr -d '\r\n')
+        if [[ -n "$location" && "$location" == *"Beeper-"* ]]; then
+            DOWNLOAD_URL="$location"
+        fi
+    fi
+
+    # Strategy 2: GET with Range 0-0 — follow redirects, request 1 byte (~1s)
+    # Needed if the API returns 200 instead of 302, or if HEAD is blocked by CDN.
+    if [[ -z "$DOWNLOAD_URL" ]]; then
+        local range_url
+        range_url=$(curl -Ls -m 10 -r 0-0 -o /dev/null -w "%{url_effective}" "$BEEPER_API" 2>/dev/null) || true
+        if [[ -n "$range_url" && "$range_url" == *"Beeper-"* ]]; then
+            DOWNLOAD_URL="$range_url"
+        fi
+    fi
+
+    # Strategy 3: Full GET with tight timeout — last resort (~10s max, bandwidth-capped)
+    if [[ -z "$DOWNLOAD_URL" ]]; then
+        local full_url
+        full_url=$(curl -Ls -m 10 --max-filesize 1048576 -o /dev/null -w "%{url_effective}" "$BEEPER_API" 2>/dev/null) || true
+        if [[ -n "$full_url" && "$full_url" == *"Beeper-"* ]]; then
+            DOWNLOAD_URL="$full_url"
+        fi
+    fi
+
+    # Extract version from resolved URL (filename only to avoid CDN path false positives)
+    if [[ -n "$DOWNLOAD_URL" ]]; then
+        LATEST=$(basename "$DOWNLOAD_URL" | grep -oP 'Beeper-\K[0-9]+\.[0-9]+\.[0-9]+')
+        if [[ -z "$LATEST" ]]; then
+            LATEST=$(basename "$DOWNLOAD_URL" | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        fi
+    fi
+
+    if [[ -z "$DOWNLOAD_URL" || -z "$LATEST" ]]; then
+        echo -e "${ERR}    ✗ Could not resolve Beeper download URL${NC}" >&2
         LATEST="unknown"
         DOWNLOAD_URL=""
-    else
-        LATEST=$(echo "$DOWNLOAD_URL" | grep -oP 'Beeper-\K[0-9]+\.[0-9]+\.[0-9]+')
-
-        # Validate LATEST extraction - if empty, API redirect may have failed
-        if [[ -z "$LATEST" ]]; then
-            # Try alternative: extract from any version pattern in URL
-            LATEST=$(echo "$DOWNLOAD_URL" | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-        fi
-        if [[ -z "$LATEST" ]]; then
-            LATEST="unknown"
-        fi
     fi
 
     # Get AUR version via JSON RPC API (structured, no HTML scraping)
