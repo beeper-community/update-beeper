@@ -57,18 +57,18 @@ Beeper Desktop
 ### After
 
 ```
-🐝 Beeper Updater v1.8.0
+🐝 Beeper Updater v1.8.1
 
 [1/8] Checking versions
   ✓ Update available
 
-[4/8] Downloading 4.2.630
+[4/8] Downloading 4.2.653
   ✓ 213MB verified
 
 ╭──────────────────────────────────────╮
 │  ✓ Update complete                   │
-│  Version  4.2.587 → 4.2.630          │
-│  Duration 52s                        │
+│  Version  4.2.630 → 4.2.653          │
+│  Duration 48s                        │
 │  Desktop  beeper-wayland.desktop     │
 ╰──────────────────────────────────────╯
 ```
