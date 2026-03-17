@@ -2,7 +2,7 @@
 # Contributor: Roberto Gogoni <your-email@example.com>
 
 pkgname=update-beeper
-pkgver=1.8.0
+pkgver=1.8.1
 pkgrel=1
 pkgdesc="Self-healing Beeper Desktop updater for Arch Linux with automatic rollback"
 arch=('any')

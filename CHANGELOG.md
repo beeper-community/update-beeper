@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-03-17
+
+### Fixed
+
+- **API version check timeout** — The curl call followed the API redirect (`-L`) and started downloading the ~200MB AppImage to `/dev/null`, always timing out (exit code 28) on slower connections
+- **Version extraction false positives** — Fallback regex could match semver patterns in CDN domain/path prefixes (e.g., `cdn-v3.example.com`); now restricted to filename via `basename`
+
+### Changed
+
+- **Progressive URL resolution** — Replaced single curl call with 3-strategy fallback:
+  1. **HEAD request** — reads Location header without following redirect (~0.7s)
+  2. **Range 0-0** — follows redirects, requests 1 byte only (~1.0s)
+  3. **Full GET** — last resort with `--max-filesize 1MB` bandwidth cap (~10s)
+- **`set -e` safety** — All curl calls in version check now have `|| true` to prevent silent failures during future refactoring
+- **Case-insensitive header parsing** — Location header extraction handles all case forms (`Location:`, `location:`, `LOCATION:`)
+
+### Performance
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Version check | 30s timeout → exit 28 | **0.7s** → success |
+| Full script to prereqs | Never reached | **4.1s** |
+
 ## [1.8.0] - 2026-03-09
 
 ### Added
@@ -220,6 +243,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 (No unreleased changes)
+
+[1.8.1]: https://github.com/beeper-community/update-beeper/releases/tag/v1.8.1
 
 ## [1.0.0] - 2026-01-16
 

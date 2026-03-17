@@ -5,7 +5,7 @@
 # Generated automatically by GitHub Actions on each release
 # Manual generation: sha256sum update-beeper beeper-version beeper-health install.sh > checksums.sha256
 
-c543d4c0d46caa107c511450f48e000488626759b5045915b02e22d031801c9e  update-beeper
+82c452f91c82d03da6966c98d20e8837b10dbe215695ba5347bb0f5b0a77e194  update-beeper
 e0d05fd668f71823f8ec052e028eec14fa1512d517809ac7ea8b3e13c47038fd  beeper-version
 089a5ae14b63f7aade976cc6b3e0b6d27eda2cf18180e2152401094e02616984  beeper-health
 8256006580a8c9ae03235af1c0a78a2fff908a9662372892201bb14d6df94a1b  install.sh
