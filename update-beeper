@@ -250,7 +250,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 cleanup() {
-    printf '\033[?25h' >/dev/tty 2>/dev/null || true  # Restore cursor if hidden by menu
+    { printf '\033[?25h' >/dev/tty; } 2>/dev/null || true  # Restore cursor if hidden by menu
     sudo_keepalive_stop
     rm -rf "$TMP_DIR" 2>/dev/null || true
     release_lock
@@ -1112,7 +1112,7 @@ check_versions() {
     # Get latest version from API (SINGLE curl call for both status + URL)
     # Sets globals: DOWNLOAD_URL, LATEST, AUR
     local api_response
-    api_response=$(curl -Ls -m 10 -o /dev/null -w "%{http_code}\n%{url_effective}" "$BEEPER_API" 2>/dev/null)
+    api_response=$(curl -ILs -m 10 -o /dev/null -w "%{http_code}\n%{url_effective}" "$BEEPER_API" 2>/dev/null)
     local http_status
     http_status=$(echo "$api_response" | head -1)
     DOWNLOAD_URL=$(echo "$api_response" | tail -1)
@@ -1122,12 +1122,12 @@ check_versions() {
         LATEST="unknown"
         DOWNLOAD_URL=""
     else
-        LATEST=$(echo "$DOWNLOAD_URL" | grep -oP 'Beeper-\K[0-9]+\.[0-9]+\.[0-9]+')
+        LATEST=$(echo "$DOWNLOAD_URL" | grep -oP 'Beeper(-[A-Za-z]+)?-\K[0-9]+\.[0-9]+\.[0-9]+' || true)
 
         # Validate LATEST extraction - if empty, API redirect may have failed
         if [[ -z "$LATEST" ]]; then
             # Try alternative: extract from any version pattern in URL
-            LATEST=$(echo "$DOWNLOAD_URL" | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            LATEST=$(echo "$DOWNLOAD_URL" | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
         fi
         if [[ -z "$LATEST" ]]; then
             LATEST="unknown"
