@@ -1,6 +1,7 @@
 <p align="center">
   <a href="https://www.beeper.com/changelog/desktop">
     <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/beeper-community/update-beeper/master/.github/badges/beeper-version.json&style=for-the-badge" alt="Beeper Latest">
+  [![Downloads](https://img.shields.io/github/downloads/beeper-community/update-beeper/total?style=flat-square&color=a6e3a1&label=downloads)](https://github.com/beeper-community/update-beeper/releases)
   </a>
   &nbsp;
   <a href="https://aur.archlinux.org/packages/beeper-v4-bin">
