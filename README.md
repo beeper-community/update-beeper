@@ -2,11 +2,11 @@
 
 An interactive terminal updater for Beeper Desktop on x86_64 Linux, built for Arch Linux and Wayland desktops. It checks Beeper's stable or nightly channel, installs the current AppImage, verifies the result, and keeps backups for recovery. A systemd user timer can run the same updater automatically.
 
-> **Release status:** This README describes the unreleased v1.9.0 integration work. `master` download links install whatever is currently on `master`; they may not contain these features until v1.9.0 is published. To use a checkout, run its local `./install.sh`.
+> **Release status:** This checkout contains unpublished v1.9.0 work. The GitHub `master` download links install the currently published version, which may not contain these features yet. To use this checkout, run its local `./install.sh`.
 
 ## Install and start
 
-To use the v1.9.0 code while it is still under development, run the installer from a checkout of this branch:
+To use the v1.9.0 code while it is still under development, run the installer from this checkout:
 
 ```bash
 cd /path/to/update-beeper

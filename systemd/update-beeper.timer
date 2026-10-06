@@ -1,6 +1,6 @@
 [Unit]
 Description=Check for Beeper updates daily
-Documentation=https://github.com/robertogogoni/update-beeper
+Documentation=https://github.com/beeper-community/update-beeper
 
 [Timer]
 # Run daily at a random time between 10:00 and 14:00

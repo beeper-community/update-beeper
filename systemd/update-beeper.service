@@ -1,6 +1,6 @@
 [Unit]
 Description=Update Beeper Desktop to latest version
-Documentation=https://github.com/robertogogoni/update-beeper
+Documentation=https://github.com/beeper-community/update-beeper
 Wants=network-online.target
 After=network-online.target
 
