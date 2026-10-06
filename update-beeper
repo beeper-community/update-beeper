@@ -351,7 +351,13 @@ record_update_history() {
 SUDO_KEEPALIVE_PID=""
 
 sudo_keepalive_start() {
-    ( while true; do sudo -v 2>/dev/null; sleep 50; done ) &
+    # Passwordless sudo needs no timestamp refresh. In particular, sudo -v can
+    # still prompt on hosts where the commands themselves are NOPASSWD.
+    if sudo -n true 2>/dev/null; then
+        return 0
+    fi
+
+    ( while true; do sudo -n -v 2>/dev/null; sleep 50; done ) &
     SUDO_KEEPALIVE_PID=$!
 }
 
@@ -704,7 +710,7 @@ show_versions() {
 #──────────────────────────────────────────────────────────────────────────────
 
 verify_sudo_access() {
-    if ! sudo -v 2>/dev/null; then
+    if ! sudo -n true 2>/dev/null && ! sudo -v 2>/dev/null; then
         fail "sudo access required"
         hint "Run with sudo privileges or ensure sudo is configured"
         return 1
@@ -890,6 +896,32 @@ verify_extraction() {
     return 0
 }
 
+# Recent Beeper AppImages keep package.json inside app.asar instead of the
+# unpacked resources/app directory. Materialize the metadata used by the
+# existing version and desktop checks before validating the extraction.
+prepare_package_metadata() {
+    local extract_dir="$1"
+    local package_dir="$extract_dir/resources/app"
+
+    [[ -f "$package_dir/package.json" ]] && return 0
+    if [[ ! -f "$extract_dir/resources/app.asar" ]]; then
+        fail "Neither unpacked package.json nor app.asar was found"
+        return 1
+    fi
+    if ! command -v asar >/dev/null 2>&1; then
+        fail "asar is required for the current Beeper AppImage layout"
+        hint "Install the asar package and retry"
+        return 1
+    fi
+
+    mkdir -p "$package_dir"
+    if ! (cd "$package_dir" && asar extract-file ../app.asar package.json >/dev/null 2>&1); then
+        fail "Could not extract package.json from app.asar"
+        return 1
+    fi
+    [[ -f "$package_dir/package.json" ]]
+}
+
 verify_binary_type() {
     local binary="$1"
 
@@ -937,23 +969,73 @@ verify_beeper_starts() {
         return 0
     fi
 
-    pkill beepertexts 2>/dev/null || true
-    sleep 2
+    # Stop the browser process and let Electron reap its helpers. Killing every
+    beepertexts process also kills its GPU/zygote children and can trigger a
+    fatal GPU-process error in the still-running browser process.
+    local pid
+    local -a main_pids=()
+    while read -r pid; do
+        [[ -r "/proc/$pid/cmdline" ]] || continue
+        [[ "$(readlink -f "/proc/$pid/exe" 2>/dev/null)" == "$INSTALL_DIR/beepertexts" ]] || continue
+        if tr '\0' '\n' < "/proc/$pid/cmdline" | grep -q '^--type='; then
+            continue
+        fi
+        main_pids+=("$pid")
+        kill -TERM "$pid" 2>/dev/null || true
+    done < <(pgrep -x beepertexts || true)
 
-    local launch_cmd="beeper"
-    if [[ -n "$WAYLAND_DISPLAY" ]]; then
-        launch_cmd="$INSTALL_DIR/beepertexts $WAYLAND_FLAGS"
+    local wait_attempt
+    for wait_attempt in {1..10}; do
+        local still_running=false
+        for pid in "${main_pids[@]}"; do
+            if kill -0 "$pid" 2>/dev/null; then
+                still_running=true
+                break
+            fi
+        done
+        [[ "$still_running" == false ]] && break
+        sleep 1
+    done
+    if [[ "$still_running" == true ]]; then
+        fail "Could not stop the previous Beeper process cleanly"
+        return 1
     fi
 
-    nohup $launch_cmd >/tmp/beeper-verify.log 2>&1 &
-    local beeper_pid=$!
+    local -a launch_cmd=("$INSTALL_DIR/beepertexts")
+    if [[ -n "$WAYLAND_DISPLAY" ]]; then
+        local -a wayland_args
+        read -r -a wayland_args <<< "$WAYLAND_FLAGS"
+        launch_cmd+=("${wayland_args[@]}")
+    fi
+
+    # A child left in update-beeper.service's cgroup is killed when its
+    # Type=oneshot parent exits. A transient user service survives that exit.
+    local beeper_unit="" beeper_pid=""
+    if command -v systemd-run >/dev/null 2>&1; then
+        beeper_unit="beeper-updater-$$-$RANDOM"
+        if ! systemd-run --user --unit="$beeper_unit" --collect \
+            --property=Type=exec \
+            --setenv="DISPLAY=${DISPLAY:-}" \
+            --setenv="WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}" \
+            "${launch_cmd[@]}" >/dev/null 2>&1; then
+            beeper_unit=""
+        fi
+    fi
+    if [[ -z "$beeper_unit" ]]; then
+        nohup "${launch_cmd[@]}" >/tmp/beeper-verify.log 2>&1 &
+        beeper_pid=$!
+    fi
 
     local prev_wait=0
     for wait_time in 3 6 10; do
         sleep $((wait_time - prev_wait))
         prev_wait=$wait_time
 
-        if ! kill -0 $beeper_pid 2>/dev/null; then
+        if [[ -n "$beeper_unit" ]] && ! systemctl --user is-active --quiet "$beeper_unit"; then
+            fail "Beeper exited within ${wait_time}s"
+            return 1
+        fi
+        if [[ -n "$beeper_pid" ]] && ! kill -0 "$beeper_pid" 2>/dev/null; then
             fail "Beeper crashed within ${wait_time}s"
             return 1
         fi
@@ -1453,7 +1535,7 @@ do_direct_install() {
             rm -rf "$extract_dir"
             local extract_log="/tmp/beeper-extract-$$.log"
             if (cd "$TMP_DIR" && ./"$appimage" --appimage-extract) >"$extract_log" 2>&1; then
-                if verify_extraction "$extract_dir"; then
+                if prepare_package_metadata "$extract_dir" && verify_extraction "$extract_dir"; then
                     rm -f "$extract_log"
                     extraction_success=true
                     break

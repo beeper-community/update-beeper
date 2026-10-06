@@ -211,6 +211,7 @@ Each stage is verified and retried with targeted fixes before falling back to au
 | **x86_64** | Beeper doesn't provide ARM builds |
 | **Arch Linux** | Or Arch-based (Manjaro, EndeavourOS) |
 | **curl** | Required |
+| **asar** | Required for Beeper builds that keep `package.json` inside `app.asar` |
 | **sudo** | Required (installs to `/opt`) |
 | **notify-send** | Optional (desktop notifications) |
 
