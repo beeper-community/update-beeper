@@ -1671,14 +1671,18 @@ verify_beeper_starts() {
     fi
 
     # Stop the browser process and let Electron reap its helpers. Killing every
-    beepertexts process also kills its GPU/zygote children and can trigger a
-    fatal GPU-process error in the still-running browser process.
+    # beepertexts process also kills its GPU/zygote children and can trigger a
+    # fatal GPU-process error in the still-running browser process.
     local pid
     local -a main_pids=()
     while read -r pid; do
         [[ -r "/proc/$pid/cmdline" ]] || continue
-        [[ "$(readlink -f "/proc/$pid/exe" 2>/dev/null)" == "$INSTALL_DIR/beepertexts" ]] || continue
-        if tr '\0' '\n' < "/proc/$pid/cmdline" | grep -q '^--type='; then
+        # After an upgrade, /proc/pid/exe points at the removed inode. Electron
+        # also rewrites argv into one string, so inspect its command line.
+        local executable
+        IFS= read -r -d '' executable < "/proc/$pid/cmdline" || true
+        [[ "$executable" == "$INSTALL_DIR/beepertexts" || "$executable" == "$INSTALL_DIR/beepertexts "* ]] || continue
+        if [[ " $executable " == *" --type="* ]]; then
             continue
         fi
         main_pids+=("$pid")
@@ -1878,8 +1882,9 @@ rollback_to_backup() {
         pass "Rollback successful"
 
         local rollback_version
-        rollback_version=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$INSTALL_DIR/resources/app/package.json" | head -1)
-        if [[ -f /usr/share/applications/beeper.desktop ]]; then
+        rollback_version=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' \
+            "$INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || true)
+        if [[ -n "$rollback_version" && -f /usr/share/applications/beeper.desktop ]]; then
             sudo sed -i "s/X-AppImage-Version=.*/X-AppImage-Version=$rollback_version/" \
                 /usr/share/applications/beeper.desktop
         fi
@@ -2503,7 +2508,9 @@ if [[ "$FORCE" != true && "$INSTALLED_BRANCH" == "$ACTIVE_BRANCH" ]] && version_
 fi
 
 log ""
-if [[ "$INSTALLED_BRANCH" != "$ACTIVE_BRANCH" ]]; then
+if [[ "$FORCE" == true && "$INSTALLED_BRANCH" == "$ACTIVE_BRANCH" ]] && version_gte "$INSTALLED" "$LATEST"; then
+    log "  ${WARN}${BOLD}Reinstall requested:${NC} ${ACTIVE_BRANCH} ${BOLD}$LATEST${NC}"
+elif [[ "$INSTALLED_BRANCH" != "$ACTIVE_BRANCH" ]]; then
     log "  ${WARN}${BOLD}Channel switch available:${NC} ${INSTALLED_BRANCH} ${INSTALLED:-unknown} → ${BOLD}${ACTIVE_BRANCH} $LATEST${NC}"
 else
     log "  ${WARN}${BOLD}Update available:${NC} ${INSTALLED:-unknown} → ${BOLD}$LATEST${NC}"
