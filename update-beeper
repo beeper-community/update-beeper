@@ -39,13 +39,28 @@ BEEPER_API_TEMPLATE="https://api.beeper.com/desktop/download/linux/x64/%s/com.au
 read_config_branch() {
     if [[ -f "$BRANCH_CONFIG_FILE" ]]; then
         local branch
-        branch=$(grep -oP '^BRANCH=\K\S+' "$BRANCH_CONFIG_FILE" 2>/dev/null)
-        if [[ "$branch" =~ ^(stable|nightly|beta)$ ]]; then
+        branch=$(grep -oP '^BRANCH=\K\S+' "$BRANCH_CONFIG_FILE" 2>/dev/null) || true
+        if [[ "$branch" =~ ^(stable|nightly)$ ]]; then
             echo "$branch"
             return
         fi
     fi
     echo "stable"
+}
+
+read_installed_branch() {
+    local marker="$INSTALL_DIR/.update-beeper-branch"
+    local branch=""
+    [[ -f "$marker" ]] && branch=$(head -1 "$marker")
+    if [[ "$branch" =~ ^(stable|nightly)$ ]]; then
+        echo "$branch"
+    else
+        echo "stable"
+    fi
+}
+
+record_installed_branch() {
+    printf '%s\n' "$ACTIVE_BRANCH" | sudo tee "$INSTALL_DIR/.update-beeper-branch" >/dev/null
 }
 
 write_config_branch() {
@@ -60,7 +75,7 @@ BEEPER_API="${BEEPER_API_TEMPLATE/\%s/$ACTIVE_BRANCH}"
 # DATA FETCHING & CACHING (beeper-intel)
 #──────────────────────────────────────────────────────────────────────────────
 
-INTEL_RAW_URL="https://raw.githubusercontent.com/robertogogoni/beeper-intel/main/data"
+INTEL_RAW_URL="https://raw.githubusercontent.com/robertogogoni/beeper-intel/master/data"
 CACHE_DIR="$HOME/.cache/update-beeper"
 CACHE_TTL_SECONDS=21600  # 6 hours
 
@@ -85,7 +100,7 @@ fetch_cached_data() {
 
     # Fetch fresh data
     local data
-    data=$(curl -sL -m 10 "$url" 2>/dev/null)
+    data=$(curl -fsSL -m 10 "$url" 2>/dev/null) || true
     if [[ -n "$data" ]] && [[ "${data:0:1}" == "{" ]] && [[ "${data: -1}" == "}" ]]; then
         echo "$data" > "${cache_file}.tmp" && mv -f "${cache_file}.tmp" "$cache_file"
         echo "$data"
@@ -174,6 +189,7 @@ DRY_RUN=false
 CHECK_DESKTOP=false
 SHOW_WHATS_NEW=false
 SHOW_MENU=false
+SHOW_AUTOMATION=false
 SET_BRANCH=""
 SHOW_BRANCH=false
 
@@ -194,9 +210,10 @@ usage() {
     echo "  --dry-run         Show what would happen without making changes"
     echo "  --history         Show update history"
     echo "  --check-desktop   Validate Beeper desktop shortcut and icon"
+    echo "  --automation-status  Show timer status and next scheduled check"
     echo "  --rollback, -r    Rollback to previous backup version"
     echo "  --version, -v     Show script version"
-    echo "  --branch [NAME]   Set or show active branch (stable, nightly)"
+    echo "  --branch [NAME]   Set or show update channel (stable, nightly)"
     echo "  --whats-new, -w   Show changes since installed version"
     echo "  --menu, -m        Force interactive menu"
     echo "  --help, -h        Show this help message"
@@ -231,11 +248,12 @@ while [[ $# -gt 0 ]]; do
         --dry-run) DRY_RUN=true; shift ;;
         --history) cat "$HISTORY_FILE" 2>/dev/null || echo "No update history yet."; exit 0 ;;
         --check-desktop) CHECK_DESKTOP=true; shift ;;
+        --automation-status) SHOW_AUTOMATION=true; shift ;;
         --rollback|-r) DO_ROLLBACK=true; shift ;;
         --version|-v) show_version ;;
         --help|-h) usage ;;
         --branch)
-            if [[ -n "${2:-}" ]] && [[ "$2" =~ ^(stable|nightly|beta)$ ]]; then
+            if [[ -n "${2:-}" ]] && [[ "$2" =~ ^(stable|nightly)$ ]]; then
                 SET_BRANCH="$2"; shift 2
             elif [[ -n "${2:-}" ]] && [[ "$2" != --* ]]; then
                 echo "Unknown branch: $2 (valid: stable, nightly)"; exit 1
@@ -305,7 +323,7 @@ RETRIES_USED=""
 
 print_header() {
     log ""
-    log "  ${PURPLE}${BOLD}🐝 Beeper Updater${NC} ${INFO}v${SCRIPT_VERSION}${NC}"
+    log "  ${PURPLE}${BOLD}🐝 Beeper Updater${NC} ${INFO}v${SCRIPT_VERSION} · ${ACTIVE_BRANCH} channel${NC}"
     log ""
 }
 
@@ -458,11 +476,15 @@ summary_box() {
 
     box_blank
     box_row "${ACCENT}Version${NC}   ${INSTALLED:-?} → ${LATEST}"
+    box_row "${ACCENT}Channel${NC}   ${INSTALLED_BRANCH:-stable} → ${ACTIVE_BRANCH}"
     box_row "${ACCENT}Method${NC}    ${UPDATE_METHOD:-Direct install}"
     box_row "${ACCENT}Duration${NC}  ${duration}"
 
     if [[ -n "$RETRIES_USED" ]]; then
         box_row "${ACCENT}Retries${NC}   ${RETRIES_USED}"
+    fi
+    if [[ -n "$ROLLBACK_BACKUP" && -d "$BACKUP_DIR/$ROLLBACK_BACKUP" ]]; then
+        box_row "${ACCENT}Backup${NC}    Ready for rollback"
     fi
 
     # Wayland row (only on Wayland)
@@ -481,6 +503,9 @@ summary_box() {
     fi
 
     box_bottom
+    if [[ -n "$ROLLBACK_BACKUP" && -d "$BACKUP_DIR/$ROLLBACK_BACKUP" ]]; then
+        detail "Backup: $BACKUP_DIR/$ROLLBACK_BACKUP"
+    fi
     log ""
 }
 
@@ -497,7 +522,7 @@ record_update_history() {
     local method="$3"    # "aur" or "direct"
     local status="$4"    # "success" or "failed" or "rolled-back"
     mkdir -p "$(dirname "$HISTORY_FILE")" 2>/dev/null || true
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $from_version → $to_version ($method) [$status]" >> "$HISTORY_FILE" 2>/dev/null || true
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $from_version → $to_version ($method, ${INSTALLED_BRANCH:-stable} → $ACTIVE_BRANCH) [$status]" >> "$HISTORY_FILE" 2>/dev/null || true
 }
 
 #──────────────────────────────────────────────────────────────────────────────
@@ -591,7 +616,7 @@ send_notification() {
 
 show_changelog() {
     local data
-    data=$(fetch_cached_data "desktop-changelog" 2>/dev/null)
+    data=$(fetch_cached_data "desktop-changelog" 2>/dev/null) || true
 
     if [[ -z "$data" ]] || ! command -v jq &>/dev/null; then
         # Fallback: open browser (original behavior)
@@ -622,6 +647,15 @@ show_changelog() {
 
     print_header
     log "  ${ACCENT}${BOLD}Changelog${NC} — ${INFO}${count} versions${NC}  ${DIM}(checked $(cache_age_display "desktop-changelog"))${NC}"
+    local feed_latest installed_version
+    feed_latest=$(echo "$data" | jq -r '.versions[0].version // "unknown"' | sed 's/^v//')
+    installed_version=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' \
+        "$INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || true)
+    if [[ "$feed_latest" != "unknown" && -n "$installed_version" ]] && \
+       version_gte "$installed_version" "$feed_latest" && [[ "$installed_version" != "$feed_latest" ]]; then
+        warn "Changelog feed ends at $feed_latest; installed Beeper is $installed_version"
+        hint "Recent notes: $CHANGELOG_URL"
+    fi
     log ""
 
     local i=0
@@ -640,7 +674,7 @@ show_changelog() {
             local feat
             feat=$(echo "$data" | jq -r ".versions[$i].new_features[$f]")
             log "    ${OK}✨${NC} ${feat}"
-            (( f++ ))
+            (( ++f ))
         done
 
         # Fixes
@@ -651,11 +685,11 @@ show_changelog() {
             local fix
             fix=$(echo "$data" | jq -r ".versions[$i].fixes[$x]")
             log "    ${WARN}🐛${NC} ${fix}"
-            (( x++ ))
+            (( ++x ))
         done
 
         log ""
-        (( i++ ))
+        (( ++i ))
     done
 
     return 0
@@ -672,17 +706,18 @@ show_whats_new() {
         return 1
     fi
 
-    # Also get branch data for latest version
-    local branch_data latest_ver
-    branch_data=$(fetch_cached_data "branch-versions" 2>/dev/null)
-    if [[ -n "$branch_data" ]] && command -v jq &>/dev/null; then
-        latest_ver=$(echo "$branch_data" | jq -r ".branches.${ACTIVE_BRANCH}.version // \"unknown\"")
+    # beeper-intel does not publish branch-versions.json. The active branch's
+    # download endpoint is the source of truth for its latest version.
+    check_versions
+    local latest_ver="$LATEST"
+    if [[ -z "$latest_ver" || "$latest_ver" == "unknown" ]]; then
+        fail "Could not determine the latest ${ACTIVE_BRANCH} version"
+        return 1
     fi
-    [[ -z "$latest_ver" || "$latest_ver" == "null" ]] && latest_ver="unknown"
 
     print_header
 
-    if version_gte "$installed" "${latest_ver:-0}"; then
+    if [[ "$(read_installed_branch)" == "$ACTIVE_BRANCH" ]] && version_gte "$installed" "$latest_ver"; then
         log ""
         box_top
         box_row "${OK}${BOLD}✓ You're up to date${NC}"
@@ -696,7 +731,7 @@ show_whats_new() {
 
     # Build "what's new" from changelog data
     local changelog
-    changelog=$(fetch_cached_data "desktop-changelog" 2>/dev/null)
+    changelog=$(fetch_cached_data "desktop-changelog" 2>/dev/null) || true
 
     log ""
     box_top "What's New"
@@ -707,6 +742,8 @@ show_whats_new() {
         local features=() fixes=() versions_spanned=0
         local count
         count=$(echo "$changelog" | jq '.versions | length // 0' 2>/dev/null) || count=0
+        local feed_latest
+        feed_latest=$(echo "$changelog" | jq -r '.versions[0].version // "unknown"' | sed 's/^v//')
 
         local i=0
         while (( i < count )); do
@@ -714,14 +751,14 @@ show_whats_new() {
             ver=$(echo "$changelog" | jq -r ".versions[$i].version" | sed 's/^v//')
             # Include versions newer than installed
             if [[ "$ver" != "$installed" ]] && ! version_gte "$installed" "$ver"; then
-                (( versions_spanned++ ))
+                (( ++versions_spanned ))
 
                 local feat_count
                 feat_count=$(echo "$changelog" | jq ".versions[$i].new_features | length // 0" 2>/dev/null) || feat_count=0
                 local f=0
                 while (( f < feat_count )); do
                     features+=("$(echo "$changelog" | jq -r ".versions[$i].new_features[$f]")")
-                    (( f++ ))
+                    (( ++f ))
                 done
 
                 local fix_count
@@ -729,14 +766,14 @@ show_whats_new() {
                 local x=0
                 while (( x < fix_count )); do
                     fixes+=("$(echo "$changelog" | jq -r ".versions[$i].fixes[$x]")")
-                    (( x++ ))
+                    (( ++x ))
                 done
             fi
             # Stop once we pass our installed version
             if [[ "$ver" == "$installed" ]] || version_gte "$installed" "$ver"; then
                 break
             fi
-            (( i++ ))
+            (( ++i ))
         done
 
         if (( ${#features[@]} > 0 )); then
@@ -757,6 +794,12 @@ show_whats_new() {
             box_blank
             box_row "${DIM}Spans ${versions_spanned} versions${NC}"
         fi
+        if [[ "$feed_latest" != "unknown" && "$latest_ver" != "$feed_latest" ]] && \
+           version_gte "$latest_ver" "$feed_latest"; then
+            box_blank
+            box_row "${WARN}Detailed notes end at $feed_latest${NC}"
+            box_row "${INFO}Recent notes: $CHANGELOG_URL${NC}"
+        fi
     else
         box_row "${INFO}Changelog data not available${NC}"
         box_row "${INFO}Install jq and wait for beeper-intel refresh${NC}"
@@ -773,19 +816,54 @@ show_whats_new() {
 
 # Menu items: key|display_name|description|group
 MENU_ITEMS=(
-    "update|Update Beeper|Install latest from current branch|Actions"
-    "switch-branch|Switch branch|Change between stable and nightly|Actions"
-    "rollback|Rollback|Restore previous backup|Actions"
-    "dry-run|Dry run|Preview update without changes|Actions"
-    "check|Check for updates|Compare installed vs latest|Information"
-    "branch-status|Branch status|Versions across all branches|Information"
-    "whats-new|What's new|Changes since installed version|Information"
-    "changelog|Show changelog|Full version history|Information"
-    "history|Show update history|Past update log|Information"
-    "desktop|Validate desktop|Check shortcut, icon, desktop entry|Maintenance"
-    "help|Help|Show all flags and usage|"
+    "update|Install latest|Update from the selected channel|Update"
+    "switch-branch|Choose channel|Stable or nightly releases|Update"
+    "dry-run|Preview update|See version, source, and backup|Update"
+    "check|Check for updates|Compare installed and selected channel|Explore"
+    "branch-status|Channel versions|Installed, stable, nightly, and AUR|Explore"
+    "whats-new|What's new|Changes since your installed version|Explore"
+    "changelog|Release notes|Browse available changelog entries|Explore"
+    "history|Update history|Past installs and rollbacks|Explore"
+    "desktop|Check desktop shortcut|Launcher, version, and icon|Maintenance"
+    "automation|Automatic updates|Timer status and next check|Maintenance"
+    "force|Reinstall version|Replace the current install|Recovery"
+    "rollback|Restore backup|Return to the previous install|Recovery"
+    "skip-checksum|Retry after hash error|Ignore stored checksum once|Recovery"
+    "help|Help and flags|All command-line options|"
     "exit|Exit||"
 )
+
+menu_status_line() {
+    local installed="unknown"
+    if [[ -f "$INSTALL_DIR/resources/app/package.json" ]]; then
+        installed=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' \
+            "$INSTALL_DIR/resources/app/package.json" | head -1 || true)
+        [[ -z "$installed" ]] && installed="unknown"
+    fi
+    printf '%s channel · installed %s (%s)' "$ACTIVE_BRANCH" "$installed" "$(read_installed_branch)"
+}
+
+show_automation_status() {
+    print_header
+    log "  ${ACCENT}${BOLD}Automatic updates${NC}"
+    log ""
+    if ! command -v systemctl >/dev/null 2>&1; then
+        warn "systemd timer is unavailable on this system"
+        return 0
+    fi
+
+    local timer_state next_check service_result
+    timer_state=$(systemctl --user is-active update-beeper.timer 2>/dev/null) || timer_state="inactive"
+    next_check=$(systemctl --user show update-beeper.timer -p NextElapseUSecRealtime --value 2>/dev/null) || true
+    service_result=$(systemctl --user show update-beeper.service -p Result --value 2>/dev/null) || true
+
+    box_top "Scheduler"
+    box_row "${ACCENT}Daily timer${NC}      ${timer_state}"
+    box_row "${ACCENT}Next check${NC}       ${next_check:-not scheduled}"
+    box_row "${ACCENT}Last result${NC}      ${service_result:-unknown}"
+    box_bottom
+    log ""
+}
 
 # Pure bash arrow-key menu selector
 # Returns selected key via stdout
@@ -794,8 +872,12 @@ menu_bash() {
     local count=${#items[@]}
     local selected=0
     local current_group=""
-    local _menu_drawn=""
+    local drawn_lines=0
     local selected_key=""
+    local terminal_lines
+    terminal_lines=$(tput lines 2>/dev/null || echo 24)
+    local compact=false
+    (( terminal_lines < count + 10 )) && compact=true
 
     # Hide cursor, restore on any exit (return, Ctrl+C, kill)
     printf '\033[?25l' >/dev/tty
@@ -803,19 +885,24 @@ menu_bash() {
     trap 'printf "\033[?25h" >/dev/tty; return 130' INT TERM
 
     while true; do
-        # Move cursor to top of menu area
-        if [[ -n "$_menu_drawn" ]]; then
-            local total_lines=$(( count + 10 ))  # items + separators + header/footer
-            printf "\033[${total_lines}A" >/dev/tty
+        # Redraw exactly the lines printed on the previous pass.
+        if (( drawn_lines > 0 )); then
+            printf "\033[${drawn_lines}A\r\033[J" >/dev/tty
         fi
-        _menu_drawn=1
+        drawn_lines=0
 
         # Header
-        local branch_badge=""
-        [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" ${INFO}[${ACTIVE_BRANCH}]${NC}"
-        echo -e "" >/dev/tty
-        echo -e "  ${PURPLE}${BOLD}🐝 Beeper Updater${NC} ${INFO}v${SCRIPT_VERSION}${NC}${branch_badge}" >/dev/tty
-        echo -e "" >/dev/tty
+        if [[ "$compact" == false ]]; then
+            echo -e "" >/dev/tty
+            drawn_lines=$((drawn_lines + 1))
+        fi
+        echo -e "  ${PURPLE}${BOLD}🐝 Beeper Updater${NC} ${INFO}v${SCRIPT_VERSION}${NC}" >/dev/tty
+        echo -e "  ${INFO}$(menu_status_line)${NC}" >/dev/tty
+        drawn_lines=$((drawn_lines + 2))
+        if [[ "$compact" == false ]]; then
+            echo -e "" >/dev/tty
+            drawn_lines=$((drawn_lines + 1))
+        fi
 
         current_group=""
         local item_index=0
@@ -824,26 +911,33 @@ menu_bash() {
             IFS='|' read -r ikey name desc group <<< "$item"
 
             # Group separator
-            if [[ -n "$group" && "$group" != "$current_group" ]]; then
+            if [[ "$compact" == false && -n "$group" && "$group" != "$current_group" ]]; then
                 current_group="$group"
                 echo -e "  ${DIM}── ${current_group} ──${NC}" >/dev/tty
-            elif [[ -z "$group" && -n "$current_group" ]]; then
+                drawn_lines=$((drawn_lines + 1))
+            elif [[ "$compact" == false && -z "$group" && -n "$current_group" ]]; then
                 current_group=""
                 echo -e "  ${DIM}──${NC}" >/dev/tty
+                drawn_lines=$((drawn_lines + 1))
             fi
 
             # Item (highlighted if selected)
             if (( item_index == selected )); then
-                echo -e "  ${PURPLE}${BOLD}▸ ${name}${NC}" >/dev/tty
+                printf '  %b▸ %-23s%b %b%s%b\n' "$PURPLE$BOLD" "$name" "$NC" "$INFO" "$desc" "$NC" >/dev/tty
             else
-                echo -e "    ${name}" >/dev/tty
+                printf '    %-23s %b%s%b\n' "$name" "$INFO" "$desc" "$NC" >/dev/tty
             fi
 
-            (( item_index++ )) || true
+            item_index=$((item_index + 1))
+            drawn_lines=$((drawn_lines + 1))
         done
 
-        echo -e "" >/dev/tty
+        if [[ "$compact" == false ]]; then
+            echo -e "" >/dev/tty
+            drawn_lines=$((drawn_lines + 1))
+        fi
         echo -e "  ${DIM}↑↓ navigate  Enter select  q quit${NC}" >/dev/tty
+        drawn_lines=$((drawn_lines + 1))
 
         # Read keypress
         local input_char
@@ -853,8 +947,8 @@ menu_bash() {
             $'\x1b')  # Escape sequence
                 read -rsn2 -t 0.1 input_char </dev/tty
                 case "$input_char" in
-                    '[A') (( selected > 0 )) && (( selected-- )) ;;          # Up
-                    '[B') (( selected < count - 1 )) && (( selected++ )) ;;   # Down
+                    '[A') if (( selected > 0 )); then selected=$((selected - 1)); fi ;;
+                    '[B') if (( selected < count - 1 )); then selected=$((selected + 1)); fi ;;
                 esac
                 ;;
             '')  # Enter
@@ -890,38 +984,20 @@ menu_bash() {
 
 menu_fzf() {
     local items=("${MENU_ITEMS[@]}")
-    local current_group=""
     local fzf_input=""
 
     for item in "${items[@]}"; do
         IFS='|' read -r key name desc group <<< "$item"
-
-        # Group separator (non-selectable)
-        if [[ -n "$group" && "$group" != "$current_group" ]]; then
-            current_group="$group"
-            fzf_input+="── ${current_group} ──\n"
-        elif [[ -z "$group" && -n "$current_group" ]]; then
-            current_group=""
-            fzf_input+="──\n"
-        fi
-
-        if [[ -n "$desc" ]]; then
-            fzf_input+="${key}|  ${name}  ·  ${desc}\n"
-        else
-            fzf_input+="${key}|  ${name}\n"
-        fi
+        fzf_input+="${key}|  ${group:+[$group] }${name}${desc:+  ·  $desc}\n"
     done
 
-    local branch_badge=""
-    [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" [$ACTIVE_BRANCH]"
-
     local result
-    result=$(echo -e "$fzf_input" | grep -v '^──' | fzf \
-        --height=~20 \
+    result=$(echo -e "$fzf_input" | fzf \
+        --height=~24 \
         --layout=reverse \
         --border=rounded \
         --prompt="  " \
-        --header="🐝 Beeper Updater v${SCRIPT_VERSION}${branch_badge}" \
+        --header="🐝 Beeper Updater v${SCRIPT_VERSION} · $(menu_status_line)" \
         --header-first \
         --delimiter='|' \
         --with-nth=2 \
@@ -940,31 +1016,18 @@ menu_fzf() {
 menu_dialog() {
     local items=("${MENU_ITEMS[@]}")
     local dialog_args=()
-    local current_group=""
 
     for item in "${items[@]}"; do
         IFS='|' read -r key name desc group <<< "$item"
-
-        # Group separator
-        if [[ -n "$group" && "$group" != "$current_group" ]]; then
-            current_group="$group"
-            dialog_args+=("" "── ${current_group} ──")
-        elif [[ -z "$group" && -n "$current_group" ]]; then
-            current_group=""
-            dialog_args+=("" "──")
-        fi
-
-        dialog_args+=("$key" "${name}${desc:+ — ${desc}}")
+        dialog_args+=("$key" "${group:+[$group] }${name}${desc:+ — ${desc}}")
     done
-
-    local branch_badge=""
-    [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" [$ACTIVE_BRANCH]"
 
     local result
     result=$(dialog \
-        --title "Beeper Updater v${SCRIPT_VERSION}${branch_badge}" \
+        --backtitle "$(menu_status_line)" \
+        --title "Beeper Updater v${SCRIPT_VERSION}" \
         --menu "Select an action:" \
-        20 60 12 \
+        22 78 15 \
         "${dialog_args[@]}" \
         2>&1 >/dev/tty) || true
 
@@ -978,30 +1041,18 @@ menu_dialog() {
 menu_whiptail() {
     local items=("${MENU_ITEMS[@]}")
     local wt_args=()
-    local current_group=""
 
     for item in "${items[@]}"; do
         IFS='|' read -r key name desc group <<< "$item"
-
-        if [[ -n "$group" && "$group" != "$current_group" ]]; then
-            current_group="$group"
-            wt_args+=("" "── ${current_group} ──")
-        elif [[ -z "$group" && -n "$current_group" ]]; then
-            current_group=""
-            wt_args+=("" "──")
-        fi
-
-        wt_args+=("$key" "${name}${desc:+ — ${desc}}")
+        wt_args+=("$key" "${group:+[$group] }${name}${desc:+ — ${desc}}")
     done
-
-    local branch_badge=""
-    [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" [$ACTIVE_BRANCH]"
 
     local result
     result=$(whiptail \
-        --title "Beeper Updater v${SCRIPT_VERSION}${branch_badge}" \
+        --backtitle "$(menu_status_line)" \
+        --title "Beeper Updater v${SCRIPT_VERSION}" \
         --menu "Select an action:" \
-        20 60 12 \
+        22 78 15 \
         "${wt_args[@]}" \
         3>&1 1>&2 2>&3) || true
 
@@ -1025,7 +1076,7 @@ detect_menu_backend() {
 switch_branch_menu() {
     local current="$ACTIVE_BRANCH"
     local branches=("stable" "nightly")
-    local descs=("Production releases" "Pre-release fixes (~2 months ahead)")
+    local descs=("Production releases" "Development builds; may be less stable")
 
     print_header
     log "  ${ACCENT}Current branch:${NC} ${BOLD}${current}${NC}"
@@ -1033,7 +1084,7 @@ switch_branch_menu() {
 
     local i=0
     for b in "${branches[@]}"; do
-        (( i++ ))
+        (( ++i ))
         if [[ "$b" == "$current" ]]; then
             log "  ${PURPLE}${BOLD}${i}) ${b}${NC}  ${DIM}(current)${NC}  ${INFO}${descs[$((i-1))]}${NC}"
         else
@@ -1075,6 +1126,8 @@ show_menu() {
         case "$selected" in
             update)        return 0 ;;  # Continue to main update flow
             switch-branch) switch_branch_menu; continue ;;
+            force)         FORCE=true; return 0 ;;
+            skip-checksum) FORCE=true; SKIP_CHECKSUM=true; return 0 ;;
             rollback)      DO_ROLLBACK=true; return 0 ;;
             dry-run)       DRY_RUN=true; return 0 ;;
             check)         CHECK_ONLY=true; return 0 ;;
@@ -1083,6 +1136,7 @@ show_menu() {
             changelog)     SHOW_CHANGELOG=true; return 0 ;;
             history)       { cat "$HISTORY_FILE" 2>/dev/null || echo "No update history yet."; } | less -R 2>/dev/null || true; continue ;;
             desktop)       CHECK_DESKTOP=true; return 0 ;;
+            automation)    show_automation_status; continue ;;
             help)          ( usage ); continue ;;
             exit|"")       exit 0 ;;
         esac
@@ -1093,7 +1147,7 @@ show_menu() {
 _any_flag_set=false
 if $CHECK_ONLY || $NOTIFY || $FORCE || $SHOW_CHANGELOG || $QUIET || \
    $DO_ROLLBACK || $SHOW_VERSIONS || $SKIP_CHECKSUM || $DRY_RUN || \
-   $CHECK_DESKTOP || $SHOW_WHATS_NEW || $SHOW_BRANCH || \
+   $CHECK_DESKTOP || $SHOW_WHATS_NEW || $SHOW_BRANCH || $SHOW_AUTOMATION || \
    [[ -n "$SET_BRANCH" ]]; then
     _any_flag_set=true
 fi
@@ -1103,6 +1157,7 @@ if [[ "$SHOW_MENU" == true ]] || { [[ "$_any_flag_set" == false ]] && [[ -t 0 ]]
 fi
 
 check_versions() {
+    INSTALLED_BRANCH=$(read_installed_branch)
     # Get installed version - ALWAYS check package.json first (source of truth)
     # pacman may show AUR version which lags behind direct installs
     INSTALLED=""
@@ -1132,7 +1187,7 @@ check_versions() {
         local headers
         headers=$(curl -sI -m 10 "$BEEPER_API" 2>/dev/null) || true
         local location
-        location=$(echo "$headers" | grep -i '^location:' | head -1 | sed -E 's/^[^:]+:[[:space:]]*//' | tr -d '\r\n')
+        location=$(echo "$headers" | grep -i '^location:' | head -1 | sed -E 's/^[^:]+:[[:space:]]*//' | tr -d '\r\n') || true
         if [[ -n "$location" && "$location" == *"Beeper-"* ]]; then
             DOWNLOAD_URL="$location"
         fi
@@ -1171,17 +1226,15 @@ check_versions() {
         DOWNLOAD_URL=""
     fi
 
-    # Get AUR version via JSON RPC API (structured, no HTML scraping)
-    local aur_json
-    aur_json=$(curl -sL -m 10 "https://aur.archlinux.org/rpc/v5/info?arg[]=beeper-v4-bin" 2>/dev/null)
-    if [[ -n "$aur_json" ]] && echo "$aur_json" | grep -q '"resultcount":1'; then
-        AUR=$(echo "$aur_json" | grep -oP '"Version"\s*:\s*"\K[0-9]+\.[0-9]+\.[0-9]+')
-        if [[ -z "$AUR" ]]; then
-            AUR="unknown"
+    # AUR only carries stable builds. Nightly updates always use Beeper's API.
+    AUR="unknown"
+    if [[ "$ACTIVE_BRANCH" == "stable" ]]; then
+        local aur_json
+        aur_json=$(curl -fsSL -m 10 "https://aur.archlinux.org/rpc/v5/info?arg[]=beeper-v4-bin" 2>/dev/null) || true
+        if [[ -n "$aur_json" ]] && echo "$aur_json" | grep -q '"resultcount":1'; then
+            AUR=$(echo "$aur_json" | grep -oP '"Version"\s*:\s*"\K[0-9]+\.[0-9]+\.[0-9]+') || true
+            [[ -z "$AUR" ]] && AUR="unknown"
         fi
-    else
-        echo -e "${WARN}    ! AUR RPC returned no results${NC}" >&2
-        AUR="unknown"
     fi
 
     # Check if beeper is tracked by pacman (affects AUR update path)
@@ -1259,7 +1312,7 @@ preserve_runtime_deps() {
     for dep in "${BEEPER_RUNTIME_DEPS[@]}"; do
         if ! pacman -Q "$dep" &>/dev/null; then
             # Not installed — nothing to preserve
-            (( skipped++ ))
+            (( ++skipped ))
             continue
         fi
 
@@ -1268,13 +1321,13 @@ preserve_runtime_deps() {
 
         if [[ "$reason" == *"Explicitly"* ]]; then
             # Already explicit — safe from orphan cleanup
-            (( skipped++ ))
+            (( ++skipped ))
             continue
         fi
 
         # Mark as explicitly installed (DB-only, no download/reinstall)
         if sudo pacman -D --asexplicit "$dep" &>/dev/null; then
-            (( preserved++ ))
+            (( ++preserved ))
         else
             warn "Could not mark $dep as explicit — may be removed by orphan cleanup"
         fi
@@ -1314,16 +1367,25 @@ validate_download_url() {
 show_versions() {
     check_versions
 
+    local other_branch="stable"
+    [[ "$ACTIVE_BRANCH" == "stable" ]] && other_branch="nightly"
+    local other_api="${BEEPER_API_TEMPLATE/\%s/$other_branch}"
+    local other_headers other_url other_latest
+    other_headers=$(curl -sI -m 10 "$other_api" 2>/dev/null) || true
+    other_url=$(echo "$other_headers" | grep -i '^location:' | head -1 | sed -E 's/^[^:]+:[[:space:]]*//' | tr -d '\r\n')
+    other_latest=$(basename "$other_url" | grep -oP 'Beeper(-[A-Za-z]+)?-\K[0-9]+\.[0-9]+\.[0-9]+' || true)
+    [[ -z "$other_latest" ]] && other_latest="unknown"
+
     print_header
     log ""
     box_top "${ACTIVE_BRANCH}"
     box_row "${ACCENT}Active branch${NC}   ${BOLD}${ACTIVE_BRANCH}${NC}"
-    box_row "${ACCENT}Installed${NC}       ${BOLD}${INSTALLED:-unknown}${NC}"
+    box_row "${ACCENT}Installed${NC}       ${BOLD}${INSTALLED:-unknown}${NC} (${INSTALLED_BRANCH})"
     box_blank
 
     # Show current branch latest
     if [[ -n "$INSTALLED" && "$INSTALLED" != "unknown" && -n "$LATEST" && "$LATEST" != "unknown" ]]; then
-        if version_gte "$INSTALLED" "$LATEST"; then
+        if [[ "$INSTALLED_BRANCH" == "$ACTIVE_BRANCH" ]] && version_gte "$INSTALLED" "$LATEST"; then
             box_row "${ACCENT}${ACTIVE_BRANCH}${NC}$(printf '%*s' $((14 - ${#ACTIVE_BRANCH})) '')${BOLD}${LATEST}${NC}  ${OK}✓ up to date${NC}"
         else
             box_row "${ACCENT}${ACTIVE_BRANCH}${NC}$(printf '%*s' $((14 - ${#ACTIVE_BRANCH})) '')${BOLD}${LATEST}${NC}  ${WARN}⬆ update available${NC}"
@@ -1331,6 +1393,7 @@ show_versions() {
     else
         box_row "${ACCENT}${ACTIVE_BRANCH}${NC}$(printf '%*s' $((14 - ${#ACTIVE_BRANCH})) '')${BOLD}${LATEST:-unknown}${NC}"
     fi
+    box_row "${ACCENT}${other_branch}${NC}$(printf '%*s' $((14 - ${#other_branch})) '')${BOLD}${other_latest}${NC}"
 
     box_blank
     box_row "${ACCENT}AUR${NC}             ${INFO}${AUR:-unknown}${NC}"
@@ -1478,6 +1541,8 @@ verify_download() {
 verify_checksum() {
     local file="$1"
     local version="$2"
+    local checksum_key="$version"
+    [[ "$ACTIVE_BRANCH" != "stable" ]] && checksum_key="${ACTIVE_BRANCH}:$version"
 
     if [[ "$SKIP_CHECKSUM" == true ]]; then
         warn "Checksum skipped (--skip-checksum)"
@@ -1495,10 +1560,10 @@ verify_checksum() {
     fi
 
     local expected_hash
-    expected_hash=$(grep "^$version " "$CHECKSUM_CACHE" 2>/dev/null | cut -d' ' -f2)
+    expected_hash=$(awk -v key="$checksum_key" '$1 == key {print $2; exit}' "$CHECKSUM_CACHE" 2>/dev/null) || true
 
     if [[ -z "$expected_hash" ]]; then
-        echo "$version $actual_hash" >> "$CHECKSUM_CACHE"
+        echo "$checksum_key $actual_hash" >> "$CHECKSUM_CACHE"
         pass "Checksum recorded: ${actual_hash:0:16}... (first run)"
         return 0
     fi
@@ -1769,7 +1834,7 @@ fix_and_retry() {
 backup_current() {
     if [[ -d "$INSTALL_DIR" ]]; then
         sudo mkdir -p "$BACKUP_DIR"
-        ROLLBACK_BACKUP="beeper-backup-${INSTALLED}-${ACTIVE_BRANCH}"
+        ROLLBACK_BACKUP="beeper-backup-${INSTALLED}-${INSTALLED_BRANCH}-$(date +%Y%m%d-%H%M%S)"
         action "Creating backup: $ROLLBACK_BACKUP"
         sudo cp -a "$INSTALL_DIR" "$BACKUP_DIR/$ROLLBACK_BACKUP"
 
@@ -1833,16 +1898,30 @@ rollback_to_backup() {
 apply_patches() {
     local extract_dir="$1"
 
-    action "Applying patches"
-    # Fix AppRun script (same as AUR)
+    action "Configuring extracted AppImage"
+    if [[ ! -f "$extract_dir/AppRun" ]]; then
+        fail "AppRun missing from extraction"
+        return 1
+    fi
     sed -Ei 's@^(if \[ -z "\$APPDIR" \] ; then)$@APPDIR="/opt/beeper"\n\1@' \
         "$extract_dir/AppRun"
+    pass "AppRun configured"
 
-    # Disable auto-update prompts (same as AUR)
-    sed -i 's/export{[a-zA-Z0-9_]* as registerLinuxConfig};/const noopFunc=function(){};export{noopFunc as registerLinuxConfig};/' \
-        "$extract_dir/resources/app/build/main/linux-"*.mjs 2>/dev/null || true
-
-    pass "Patches applied"
+    # Beeper now packages its JavaScript in app.asar. The historical file
+    # patch only applies to builds that still ship unpacked JavaScript.
+    local js_files=("$extract_dir"/resources/app/build/main/linux-*.mjs)
+    if [[ -f "${js_files[0]}" ]]; then
+        local js_file patched=false
+        for js_file in "${js_files[@]}"; do
+            if grep -Fq ' as registerLinuxConfig};' "$js_file"; then
+                sed -i 's/export{[a-zA-Z0-9_]* as registerLinuxConfig};/const noopFunc=function(){};export{noopFunc as registerLinuxConfig};/' "$js_file"
+                patched=true
+            fi
+        done
+        [[ "$patched" == true ]] && pass "Built-in updater prompt patch applied" || warn "Updater prompt patch not found"
+    elif [[ -f "$extract_dir/resources/app.asar" ]]; then
+        warn "Updater prompt patch skipped: JavaScript is packed in app.asar"
+    fi
 }
 
 install_files() {
@@ -1882,6 +1961,11 @@ install_files() {
         if ! verify_permissions "$INSTALL_DIR"; then
             return 1
         fi
+    fi
+
+    if ! record_installed_branch; then
+        fail "Could not record installed Beeper branch"
+        return 1
     fi
 
     # Update desktop file version (may not exist after direct installs)
@@ -2268,6 +2352,7 @@ perform_update() {
         aur-behind) warn "AUR is behind ($AUR < $LATEST) — direct install" ;;
         aur-unknown) warn "AUR version unknown — direct install" ;;
         aur-failed)  warn "AUR install failed — falling back to direct install" ;;
+        channel-switch) detail "Installing from ${ACTIVE_BRANCH} channel" ;;
         *)           detail "Direct install" ;;
     esac
 
@@ -2342,6 +2427,11 @@ if [[ "$SHOW_BRANCH" == true ]]; then
     exit 0
 fi
 
+if [[ "$SHOW_AUTOMATION" == true ]]; then
+    show_automation_status
+    exit $?
+fi
+
 # Handle what's new display (early exit)
 if [[ "$SHOW_WHATS_NEW" == true ]]; then
     show_whats_new
@@ -2395,7 +2485,7 @@ else
     detail "Pacman:    untracked (--overwrite will be used)"
 fi
 
-log_event "VERSIONS installed=${INSTALLED:-unknown} latest=${LATEST:-unknown} aur=${AUR:-unknown} pacman=$PACMAN_TRACKED"
+log_event "VERSIONS installed=${INSTALLED:-unknown} installed_branch=$INSTALLED_BRANCH latest=${LATEST:-unknown} active_branch=$ACTIVE_BRANCH aur=${AUR:-unknown} pacman=$PACMAN_TRACKED"
 
 # Validate we got version info
 if [[ -z "$LATEST" || "$LATEST" == "unknown" ]]; then
@@ -2405,7 +2495,7 @@ if [[ -z "$LATEST" || "$LATEST" == "unknown" ]]; then
 fi
 
 # Compare versions
-if [[ "$FORCE" != true ]] && version_gte "$INSTALLED" "$LATEST"; then
+if [[ "$FORCE" != true && "$INSTALLED_BRANCH" == "$ACTIVE_BRANCH" ]] && version_gte "$INSTALLED" "$LATEST"; then
     pass "Already on the latest version (${INSTALLED})"
     log_event "UP_TO_DATE version=$INSTALLED"
     log ""
@@ -2413,11 +2503,17 @@ if [[ "$FORCE" != true ]] && version_gte "$INSTALLED" "$LATEST"; then
 fi
 
 log ""
-log "  ${WARN}${BOLD}Update available:${NC} ${INSTALLED:-unknown} → ${BOLD}$LATEST${NC}"
+if [[ "$INSTALLED_BRANCH" != "$ACTIVE_BRANCH" ]]; then
+    log "  ${WARN}${BOLD}Channel switch available:${NC} ${INSTALLED_BRANCH} ${INSTALLED:-unknown} → ${BOLD}${ACTIVE_BRANCH} $LATEST${NC}"
+else
+    log "  ${WARN}${BOLD}Update available:${NC} ${INSTALLED:-unknown} → ${BOLD}$LATEST${NC}"
+fi
 
 # Check-only mode
 if [[ "$CHECK_ONLY" == true ]]; then
-    [[ "$NOTIFY" == true ]] && send_notification "Update available: ${INSTALLED:-unknown} → $LATEST"
+    if [[ "$NOTIFY" == true ]]; then
+        send_notification "${INSTALLED_BRANCH} ${INSTALLED:-unknown} → ${ACTIVE_BRANCH} $LATEST"
+    fi
     exit 0
 fi
 
@@ -2438,6 +2534,7 @@ if [[ "$DRY_RUN" == true ]]; then
     box_row "${ACCENT}${BOLD}Dry run${NC} — no changes"
     box_blank
     box_row "${ACCENT}Version${NC}   ${INSTALLED:-unknown} → $LATEST"
+    box_row "${ACCENT}Channel${NC}   ${INSTALLED_BRANCH} → ${ACTIVE_BRANCH}"
     if [[ "$AUR" != "unknown" ]] && version_gte "$AUR" "$LATEST"; then
         box_row "${ACCENT}Method${NC}    AUR (yay)"
     elif [[ "$AUR" != "unknown" ]]; then
@@ -2489,7 +2586,7 @@ if [[ -d "$INSTALL_DIR" ]]; then
 fi
 
 # Try AUR first if it has the latest
-if [[ "$AUR" != "unknown" ]] && version_gte "$AUR" "$LATEST"; then
+if [[ "$ACTIVE_BRANCH" == "stable" && "$AUR" != "unknown" ]] && version_gte "$AUR" "$LATEST"; then
     TOTAL_STEPS=4
     CURRENT_STEP=3
     next_phase "Updating via AUR"
@@ -2497,6 +2594,10 @@ if [[ "$AUR" != "unknown" ]] && version_gte "$AUR" "$LATEST"; then
     log_event "AUR_ATTEMPT version=$AUR"
 
     if yay -S --noconfirm --overwrite '/opt/beeper/*' beeper-v4-bin; then
+        if ! record_installed_branch; then
+            fail "Could not record installed Beeper branch"
+            exit 1
+        fi
         pass "Installed $LATEST via AUR"
         log_event "AUR_SUCCESS version=$LATEST"
         record_update_history "${INSTALLED:-unknown}" "$LATEST" "aur" "success"
@@ -2529,7 +2630,9 @@ fi
 
 # Determine reason for direct install
 DIRECT_REASON="direct"
-if [[ "$AUR" == "unknown" ]]; then
+if [[ "$ACTIVE_BRANCH" != "stable" ]]; then
+    DIRECT_REASON="channel-switch"
+elif [[ "$AUR" == "unknown" ]]; then
     DIRECT_REASON="aur-unknown"
 elif ! version_gte "$AUR" "$LATEST"; then
     DIRECT_REASON="aur-behind"

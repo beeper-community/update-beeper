@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Accept passwordless sudo access without an unnecessary password prompt.
 - Launch Beeper outside the updater service so it survives the update check.
 - Stop only the Beeper browser process during restart, allowing Electron helpers to exit cleanly.
+- Show every available update and recovery action in the terminal menu, with channel and installed-version context.
+- Show scheduled update status and the next check from the terminal menu or `--automation-status`.
+- Keep checksum records separate for stable and nightly builds, and track the installed channel.
+- Handle unavailable changelog data without a silent exit, and identify stale release notes.
 
 ## [1.8.1] - 2026-03-17
 

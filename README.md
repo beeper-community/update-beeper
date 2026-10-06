@@ -135,13 +135,14 @@ update-beeper --history      # Show past updates
 | `--quiet`         | `-q`  | Errors only (for cron/systemd)       |
 | `--notify`        | `-n`  | Desktop notification                 |
 | `--rollback`      | `-r`  | Rollback to previous backup          |
-| `--changelog`     | `-l`  | Open changelog in browser            |
-| `--versions`      |       | Show installed, latest, AUR versions |
+| `--changelog`     | `-l`  | Show cached notes, with browser fallback |
+| `--versions`      |       | Show installed, stable, nightly, and AUR versions |
 | `--dry-run`       |       | Preview what would happen            |
 | `--history`       |       | Show update history                  |
 | `--skip-checksum` |       | Skip SHA256 verification             |
 | `--check-desktop` |       | Validate desktop shortcut and icon   |
-| `--branch`        |       | Set or show active branch (stable, nightly) |
+| `--automation-status` | | Show timer status and next check |
+| `--branch`        |       | Set or show update channel (stable, nightly) |
 | `--whats-new`     | `-w`  | Show changes since installed version |
 | `--menu`          | `-m`  | Force interactive menu               |
 | `--version`       | `-v`  | Show script version                  |
@@ -205,7 +206,9 @@ update-beeper --menu   # Force menu even with other flags
 
 **Branch support** lets you switch between `stable` and `nightly` channels. Branch preference persists in `~/.config/update-beeper/config`.
 
-**In-terminal changelog** shows version diffs pulled from cached [beeper-intel](https://github.com/beeper-community/beeper-intel) data (6-hour local cache).
+**Terminal menu** groups update, exploration, maintenance, and recovery actions. It includes channel selection, a preview, timer status, rollback, and an explicit retry after a cached checksum mismatch. The compact Bash menu fits shorter terminals.
+
+**In-terminal changelog** uses cached [beeper-intel](https://github.com/robertogogoni/beeper-intel) data (6-hour local cache). When that feed lags behind the installed version, the terminal shows its latest covered version and links to Beeper's current notes.
 
 ---
 
@@ -219,10 +222,11 @@ update-beeper --menu   # Force menu even with other flags
 | `~/.local/share/applications/beeper-wayland.desktop` | Desktop shortcut (Wayland) |
 | `~/.local/share/icons/hicolor/512x512/apps/beepertexts.png` | Launcher icon |
 | `~/.local/share/update-beeper/update-beeper.log` | Event log |
-| `~/.local/share/update-beeper/history.txt` | Update history |
+| `~/.local/share/update-beeper/update-history.log` | Update history |
 | `~/.config/update-beeper/config` | Branch and preferences |
 | `~/.cache/update-beeper/checksums.txt` | SHA256 cache |
-| `~/.cache/update-beeper/` | Intel data cache (versions, changelog) |
+| `~/.cache/update-beeper/` | Changelog cache |
+| `/opt/beeper/.update-beeper-branch` | Installed channel marker |
 
 ---
 
