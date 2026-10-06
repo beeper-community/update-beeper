@@ -4,9 +4,9 @@
 
 set -e
 
-SCRIPT_VERSION="1.8.1"
+SCRIPT_VERSION="1.9.0"
 LOCKFILE="/tmp/update-beeper.lock"
-BEEPER_API="https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop"
+# BEEPER_API is set dynamically after branch config is read (see ACTIVE_BRANCH)
 CHANGELOG_URL="https://www.beeper.com/changelog/desktop"
 INSTALL_DIR="/opt/beeper"
 BACKUP_DIR="/opt/beeper-backups"
@@ -30,6 +30,92 @@ CHECKSUM_CACHE="$HOME/.cache/update-beeper/checksums.txt"
 # Persistent log and update history
 LOG_FILE="$HOME/.local/share/update-beeper/update-beeper.log"
 HISTORY_FILE="$HOME/.local/share/update-beeper/update-history.log"
+
+# Branch configuration
+BRANCH_CONFIG_DIR="$HOME/.config/update-beeper"
+BRANCH_CONFIG_FILE="$BRANCH_CONFIG_DIR/config"
+BEEPER_API_TEMPLATE="https://api.beeper.com/desktop/download/linux/x64/%s/com.automattic.beeper.desktop"
+
+read_config_branch() {
+    if [[ -f "$BRANCH_CONFIG_FILE" ]]; then
+        local branch
+        branch=$(grep -oP '^BRANCH=\K\S+' "$BRANCH_CONFIG_FILE" 2>/dev/null)
+        if [[ "$branch" =~ ^(stable|nightly|beta)$ ]]; then
+            echo "$branch"
+            return
+        fi
+    fi
+    echo "stable"
+}
+
+write_config_branch() {
+    mkdir -p "$BRANCH_CONFIG_DIR"
+    echo "BRANCH=$1" > "$BRANCH_CONFIG_FILE"
+}
+
+ACTIVE_BRANCH=$(read_config_branch)
+BEEPER_API="${BEEPER_API_TEMPLATE/\%s/$ACTIVE_BRANCH}"
+
+#──────────────────────────────────────────────────────────────────────────────
+# DATA FETCHING & CACHING (beeper-intel)
+#──────────────────────────────────────────────────────────────────────────────
+
+INTEL_RAW_URL="https://raw.githubusercontent.com/robertogogoni/beeper-intel/main/data"
+CACHE_DIR="$HOME/.cache/update-beeper"
+CACHE_TTL_SECONDS=21600  # 6 hours
+
+# Ensure cache directory exists
+mkdir -p "$CACHE_DIR" 2>/dev/null || true
+
+# Fetch data with local cache. Returns cached content if within TTL.
+# Usage: fetch_cached_data "branch-versions"  →  prints JSON to stdout
+fetch_cached_data() {
+    local name="$1"
+    local cache_file="$CACHE_DIR/${name}.json"
+    local url="${INTEL_RAW_URL}/${name}.json"
+
+    # Check cache freshness
+    if [[ -f "$cache_file" ]]; then
+        local cache_age=$(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0) ))
+        if (( cache_age < CACHE_TTL_SECONDS )); then
+            cat "$cache_file"
+            return 0
+        fi
+    fi
+
+    # Fetch fresh data
+    local data
+    data=$(curl -sL -m 10 "$url" 2>/dev/null)
+    if [[ -n "$data" ]] && [[ "${data:0:1}" == "{" ]] && [[ "${data: -1}" == "}" ]]; then
+        echo "$data" > "${cache_file}.tmp" && mv -f "${cache_file}.tmp" "$cache_file"
+        echo "$data"
+        return 0
+    fi
+
+    # Fallback to stale cache
+    if [[ -f "$cache_file" ]]; then
+        cat "$cache_file"
+        return 0
+    fi
+
+    return 1
+}
+
+# Get human-readable cache age for display
+cache_age_display() {
+    local name="$1"
+    local cache_file="$CACHE_DIR/${name}.json"
+    if [[ -f "$cache_file" ]]; then
+        local age=$(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0) ))
+        if (( age < 60 )); then echo "just now"
+        elif (( age < 3600 )); then echo "$((age / 60))m ago"
+        elif (( age < 86400 )); then echo "$((age / 3600))h ago"
+        else echo "$((age / 86400))d ago"
+        fi
+    else
+        echo "never"
+    fi
+}
 
 # Minimum required free space (500MB for download + extraction + buffer)
 MIN_FREE_SPACE_MB=500
@@ -68,7 +154,11 @@ BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m'
 
-
+# ── Dynamic Box Width ────────────────────────────────────────────────────
+# Responsive to terminal size, clamped between 36-56 inner chars
+BOX_WIDTH=$(( $(tput cols 2>/dev/null || echo 80) - 6 ))
+(( BOX_WIDTH > 56 )) && BOX_WIDTH=56
+(( BOX_WIDTH < 36 )) && BOX_WIDTH=36
 
 # Flags
 CHECK_ONLY=false
@@ -82,6 +172,10 @@ SHOW_VERSIONS=false
 SKIP_CHECKSUM=false
 DRY_RUN=false
 CHECK_DESKTOP=false
+SHOW_WHATS_NEW=false
+SHOW_MENU=false
+SET_BRANCH=""
+SHOW_BRANCH=false
 
 # Track which backup to use for rollback
 ROLLBACK_BACKUP=""
@@ -102,6 +196,9 @@ usage() {
     echo "  --check-desktop   Validate Beeper desktop shortcut and icon"
     echo "  --rollback, -r    Rollback to previous backup version"
     echo "  --version, -v     Show script version"
+    echo "  --branch [NAME]   Set or show active branch (stable, nightly)"
+    echo "  --whats-new, -w   Show changes since installed version"
+    echo "  --menu, -m        Force interactive menu"
     echo "  --help, -h        Show this help message"
     echo ""
     echo "Beeper will automatically restart after updating."
@@ -137,11 +234,23 @@ while [[ $# -gt 0 ]]; do
         --rollback|-r) DO_ROLLBACK=true; shift ;;
         --version|-v) show_version ;;
         --help|-h) usage ;;
+        --branch)
+            if [[ -n "${2:-}" ]] && [[ "$2" =~ ^(stable|nightly|beta)$ ]]; then
+                SET_BRANCH="$2"; shift 2
+            elif [[ -n "${2:-}" ]] && [[ "$2" != --* ]]; then
+                echo "Unknown branch: $2 (valid: stable, nightly)"; exit 1
+            else
+                SHOW_BRANCH=true; shift
+            fi
+            ;;
+        --whats-new|-w) SHOW_WHATS_NEW=true; shift ;;
+        --menu|-m) SHOW_MENU=true; shift ;;
         *) echo "Unknown option: $1"; usage ;;
     esac
 done
 
 cleanup() {
+    { printf '\033[?25h' >/dev/tty; } 2>/dev/null || true  # Restore cursor if hidden by menu
     sudo_keepalive_stop
     rm -rf "$TMP_DIR" 2>/dev/null || true
     release_lock
@@ -265,21 +374,68 @@ check_flush() {
 }
 
 #──────────────────────────────────────────────────────────────────────────────
-# SUMMARY BOX
+# BOX RENDERING PRIMITIVES
 #──────────────────────────────────────────────────────────────────────────────
 
-# Pad a row to fit inside the summary box (42 chars inner width)
-pad_row() {
+# Strip ANSI escape codes to get visible character count
+strip_ansi() {
+    echo -e "$1" | sed 's/\x1b\[[0-9;]*m//g'
+}
+
+# Top border: ╭──── [optional title] ─╮
+box_top() {
+    local title="$1"
+    if [[ -n "$title" ]]; then
+        local visible
+        visible=$(strip_ansi "$title")
+        local title_len=${#visible}
+        local bar_len=$(( BOX_WIDTH - title_len - 4 ))
+        (( bar_len < 1 )) && bar_len=1
+        log "  ${INFO}╭─$(printf '─%.0s' $(seq 1 $bar_len)) ${NC}${title}${INFO} ─╮${NC}"
+    else
+        log "  ${INFO}╭$(printf '─%.0s' $(seq 1 $BOX_WIDTH))╮${NC}"
+    fi
+}
+
+# Bottom border: ╰──────────────────╯
+box_bottom() {
+    log "  ${INFO}╰$(printf '─%.0s' $(seq 1 $BOX_WIDTH))╯${NC}"
+}
+
+# Content row: │ content      │  (ANSI-safe padding)
+box_row() {
     local content="$1"
-    local width=38
-    # Strip ANSI codes to count visible chars
+    local inner_width=$(( BOX_WIDTH - 2 ))
     local visible
-    visible=$(echo -e "$content" | sed 's/\x1b\[[0-9;]*m//g')
+    visible=$(strip_ansi "$content")
     local vlen=${#visible}
-    local pad=$((width - vlen))
-    [[ $pad -lt 0 ]] && pad=0
+    local pad=$(( inner_width - vlen ))
+    (( pad < 0 )) && pad=0
     log "  ${INFO}│${NC} ${content}$(printf '%*s' "$pad" '') ${INFO}│${NC}"
 }
+
+# Empty row: │               │
+box_blank() {
+    log "  ${INFO}│${NC}$(printf '%*s' $(( BOX_WIDTH )) '')${INFO}│${NC}"
+}
+
+# Separator: ├── label ──────┤  or  ├──────────────┤
+box_sep() {
+    local label="$1"
+    if [[ -n "$label" ]]; then
+        local visible
+        visible=$(strip_ansi "$label")
+        local label_len=${#visible}
+        local bar_len=$(( BOX_WIDTH - label_len - 4 ))
+        (( bar_len < 1 )) && bar_len=1
+        log "  ${INFO}├── ${DIM}${label}${NC}${INFO} $(printf '─%.0s' $(seq 1 $bar_len))┤${NC}"
+    else
+        log "  ${INFO}├$(printf '─%.0s' $(seq 1 $BOX_WIDTH))┤${NC}"
+    fi
+}
+
+# Backward compat: pad_row is now an alias for box_row
+pad_row() { box_row "$@"; }
 
 summary_box() {
     local status="$1"  # "success" or "failure"
@@ -292,39 +448,39 @@ summary_box() {
     fi
 
     log ""
-    log "  ${INFO}╭──────────────────────────────────────╮${NC}"
+    box_top
 
     if [[ "$status" == "success" ]]; then
-        pad_row "${OK}${BOLD}✓ Update complete${NC}"
+        box_row "${OK}${BOLD}✓ Update complete${NC}"
     else
-        pad_row "${ERR}${BOLD}✗ Update failed${NC}"
+        box_row "${ERR}${BOLD}✗ Update failed${NC}"
     fi
 
-    log "  ${INFO}│${NC}$(printf '%*s' 39 '')${INFO}│${NC}"
-    pad_row "${ACCENT}Version${NC}   ${INSTALLED:-?} → ${LATEST}"
-    pad_row "${ACCENT}Method${NC}    ${UPDATE_METHOD:-Direct install}"
-    pad_row "${ACCENT}Duration${NC}  ${duration}"
+    box_blank
+    box_row "${ACCENT}Version${NC}   ${INSTALLED:-?} → ${LATEST}"
+    box_row "${ACCENT}Method${NC}    ${UPDATE_METHOD:-Direct install}"
+    box_row "${ACCENT}Duration${NC}  ${duration}"
 
     if [[ -n "$RETRIES_USED" ]]; then
-        pad_row "${ACCENT}Retries${NC}   ${RETRIES_USED}"
+        box_row "${ACCENT}Retries${NC}   ${RETRIES_USED}"
     fi
 
     # Wayland row (only on Wayland)
     if [[ -n "$WAYLAND_DISPLAY" ]]; then
-        pad_row "${ACCENT}Wayland${NC}   Configured"
+        box_row "${ACCENT}Wayland${NC}   Configured"
     fi
 
     # Desktop entry status
     if [[ -f "$USER_DESKTOP_FILE" ]]; then
-        pad_row "${ACCENT}Desktop${NC}   $(basename "$USER_DESKTOP_FILE")"
+        box_row "${ACCENT}Desktop${NC}   $(basename "$USER_DESKTOP_FILE")"
     fi
 
     # Rollback row (only on failure with rollback)
     if [[ "$status" == "failure" && -n "$2" ]]; then
-        pad_row "${ACCENT}Action${NC}    $2"
+        box_row "${ACCENT}Action${NC}    $2"
     fi
 
-    log "  ${INFO}╰──────────────────────────────────────╯${NC}"
+    box_bottom
     log ""
 }
 
@@ -434,36 +590,517 @@ send_notification() {
 }
 
 show_changelog() {
-    # Get installed version
-    local version=""
-    if [[ -f "$INSTALL_DIR/resources/app/package.json" ]]; then
-        version=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$INSTALL_DIR/resources/app/package.json" | head -1)
+    local data
+    data=$(fetch_cached_data "desktop-changelog" 2>/dev/null)
+
+    if [[ -z "$data" ]] || ! command -v jq &>/dev/null; then
+        # Fallback: open browser (original behavior)
+        local version=""
+        if [[ -f "$INSTALL_DIR/resources/app/package.json" ]]; then
+            version=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$INSTALL_DIR/resources/app/package.json" | head -1)
+        fi
+        print_header
+        log "  ${ACCENT}Changelog${NC}"
+        log ""
+        detail "Opening in browser..."
+        if command -v xdg-open &>/dev/null; then
+            xdg-open "$CHANGELOG_URL" 2>/dev/null &
+        elif command -v open &>/dev/null; then
+            open "$CHANGELOG_URL" 2>/dev/null &
+        else
+            warn "Could not open browser"
+            detail "Visit: ${CHANGELOG_URL}"
+        fi
+        hint "Cached changelog data not available. Install jq for in-terminal display."
+        return 0
     fi
 
-    if [[ -z "$version" ]]; then
-        fail "Could not determine installed Beeper version"
+    # Parse and display changelog entries
+    local output=""
+    local count
+    count=$(echo "$data" | jq '.versions | length // 0' 2>/dev/null) || count=0
+
+    print_header
+    log "  ${ACCENT}${BOLD}Changelog${NC} — ${INFO}${count} versions${NC}  ${DIM}(checked $(cache_age_display "desktop-changelog"))${NC}"
+    log ""
+
+    local i=0
+    while (( i < count )); do
+        local ver date
+        ver=$(echo "$data" | jq -r ".versions[$i].version" | sed 's/^v//')
+        date=$(echo "$data" | jq -r ".versions[$i].date // \"\"")
+
+        log "  ${BOLD}${ver}${NC}${date:+ ${DIM}(${date})${NC}}"
+
+        # New features
+        local feat_count
+        feat_count=$(echo "$data" | jq ".versions[$i].new_features | length // 0" 2>/dev/null) || feat_count=0
+        local f=0
+        while (( f < feat_count )); do
+            local feat
+            feat=$(echo "$data" | jq -r ".versions[$i].new_features[$f]")
+            log "    ${OK}✨${NC} ${feat}"
+            (( f++ ))
+        done
+
+        # Fixes
+        local fix_count
+        fix_count=$(echo "$data" | jq ".versions[$i].fixes | length // 0" 2>/dev/null) || fix_count=0
+        local x=0
+        while (( x < fix_count )); do
+            local fix
+            fix=$(echo "$data" | jq -r ".versions[$i].fixes[$x]")
+            log "    ${WARN}🐛${NC} ${fix}"
+            (( x++ ))
+        done
+
+        log ""
+        (( i++ ))
+    done
+
+    return 0
+}
+
+show_whats_new() {
+    local installed=""
+    if [[ -f "$INSTALL_DIR/resources/app/package.json" ]]; then
+        installed=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$INSTALL_DIR/resources/app/package.json" | head -1)
+    fi
+
+    if [[ -z "$installed" ]]; then
+        fail "Could not determine installed version"
         return 1
     fi
 
-    print_header
-    log "  ${ACCENT}Changelog${NC} for ${BOLD}$version${NC}"
-    log ""
-    detail "Opening in browser..."
+    # Also get branch data for latest version
+    local branch_data latest_ver
+    branch_data=$(fetch_cached_data "branch-versions" 2>/dev/null)
+    if [[ -n "$branch_data" ]] && command -v jq &>/dev/null; then
+        latest_ver=$(echo "$branch_data" | jq -r ".branches.${ACTIVE_BRANCH}.version // \"unknown\"")
+    fi
+    [[ -z "$latest_ver" || "$latest_ver" == "null" ]] && latest_ver="unknown"
 
-    # Open changelog in default browser
-    if command -v xdg-open &>/dev/null; then
-        xdg-open "$CHANGELOG_URL" 2>/dev/null &
-    elif command -v open &>/dev/null; then
-        open "$CHANGELOG_URL" 2>/dev/null &
-    else
-        warn "Could not open browser automatically"
-        detail "Visit: ${CHANGELOG_URL}"
+    print_header
+
+    if version_gte "$installed" "${latest_ver:-0}"; then
+        log ""
+        box_top
+        box_row "${OK}${BOLD}✓ You're up to date${NC}"
+        box_blank
+        box_row "${ACCENT}Installed${NC}   ${installed} (${ACTIVE_BRANCH})"
+        box_row "${ACCENT}Latest${NC}      ${latest_ver}"
+        box_bottom
+        log ""
+        return 0
     fi
 
+    # Build "what's new" from changelog data
+    local changelog
+    changelog=$(fetch_cached_data "desktop-changelog" 2>/dev/null)
+
     log ""
-    hint "Search for '$version' on the page to find your version's changes"
+    box_top "What's New"
+    box_row "${ACCENT}You${NC}  ${installed} → ${ACCENT}Latest${NC}  ${BOLD}${latest_ver}${NC} (${ACTIVE_BRANCH})"
+    box_blank
+
+    if [[ -n "$changelog" ]] && command -v jq &>/dev/null; then
+        local features=() fixes=() versions_spanned=0
+        local count
+        count=$(echo "$changelog" | jq '.versions | length // 0' 2>/dev/null) || count=0
+
+        local i=0
+        while (( i < count )); do
+            local ver
+            ver=$(echo "$changelog" | jq -r ".versions[$i].version" | sed 's/^v//')
+            # Include versions newer than installed
+            if [[ "$ver" != "$installed" ]] && ! version_gte "$installed" "$ver"; then
+                (( versions_spanned++ ))
+
+                local feat_count
+                feat_count=$(echo "$changelog" | jq ".versions[$i].new_features | length // 0" 2>/dev/null) || feat_count=0
+                local f=0
+                while (( f < feat_count )); do
+                    features+=("$(echo "$changelog" | jq -r ".versions[$i].new_features[$f]")")
+                    (( f++ ))
+                done
+
+                local fix_count
+                fix_count=$(echo "$changelog" | jq ".versions[$i].fixes | length // 0" 2>/dev/null) || fix_count=0
+                local x=0
+                while (( x < fix_count )); do
+                    fixes+=("$(echo "$changelog" | jq -r ".versions[$i].fixes[$x]")")
+                    (( x++ ))
+                done
+            fi
+            # Stop once we pass our installed version
+            if [[ "$ver" == "$installed" ]] || version_gte "$installed" "$ver"; then
+                break
+            fi
+            (( i++ ))
+        done
+
+        if (( ${#features[@]} > 0 )); then
+            box_sep "New Features"
+            for feat in "${features[@]}"; do
+                box_row "  ${OK}✨${NC} ${feat}"
+            done
+        fi
+
+        if (( ${#fixes[@]} > 0 )); then
+            box_sep "Fixes"
+            for fix in "${fixes[@]}"; do
+                box_row "  ${WARN}🐛${NC} ${fix}"
+            done
+        fi
+
+        if (( versions_spanned > 1 )); then
+            box_blank
+            box_row "${DIM}Spans ${versions_spanned} versions${NC}"
+        fi
+    else
+        box_row "${INFO}Changelog data not available${NC}"
+        box_row "${INFO}Install jq and wait for beeper-intel refresh${NC}"
+    fi
+
+    box_bottom
+    log ""
     return 0
 }
+
+#──────────────────────────────────────────────────────────────────────────────
+# INTERACTIVE MENU SYSTEM
+#──────────────────────────────────────────────────────────────────────────────
+
+# Menu items: key|display_name|description|group
+MENU_ITEMS=(
+    "update|Update Beeper|Install latest from current branch|Actions"
+    "switch-branch|Switch branch|Change between stable and nightly|Actions"
+    "rollback|Rollback|Restore previous backup|Actions"
+    "dry-run|Dry run|Preview update without changes|Actions"
+    "check|Check for updates|Compare installed vs latest|Information"
+    "branch-status|Branch status|Versions across all branches|Information"
+    "whats-new|What's new|Changes since installed version|Information"
+    "changelog|Show changelog|Full version history|Information"
+    "history|Show update history|Past update log|Information"
+    "desktop|Validate desktop|Check shortcut, icon, desktop entry|Maintenance"
+    "help|Help|Show all flags and usage|"
+    "exit|Exit||"
+)
+
+# Pure bash arrow-key menu selector
+# Returns selected key via stdout
+menu_bash() {
+    local items=("${MENU_ITEMS[@]}")
+    local count=${#items[@]}
+    local selected=0
+    local current_group=""
+    local _menu_drawn=""
+    local selected_key=""
+
+    # Hide cursor, restore on any exit (return, Ctrl+C, kill)
+    printf '\033[?25l' >/dev/tty
+    trap 'printf "\033[?25h" >/dev/tty' RETURN
+    trap 'printf "\033[?25h" >/dev/tty; return 130' INT TERM
+
+    while true; do
+        # Move cursor to top of menu area
+        if [[ -n "$_menu_drawn" ]]; then
+            local total_lines=$(( count + 10 ))  # items + separators + header/footer
+            printf "\033[${total_lines}A" >/dev/tty
+        fi
+        _menu_drawn=1
+
+        # Header
+        local branch_badge=""
+        [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" ${INFO}[${ACTIVE_BRANCH}]${NC}"
+        echo -e "" >/dev/tty
+        echo -e "  ${PURPLE}${BOLD}🐝 Beeper Updater${NC} ${INFO}v${SCRIPT_VERSION}${NC}${branch_badge}" >/dev/tty
+        echo -e "" >/dev/tty
+
+        current_group=""
+        local item_index=0
+
+        for item in "${items[@]}"; do
+            IFS='|' read -r ikey name desc group <<< "$item"
+
+            # Group separator
+            if [[ -n "$group" && "$group" != "$current_group" ]]; then
+                current_group="$group"
+                echo -e "  ${DIM}── ${current_group} ──${NC}" >/dev/tty
+            elif [[ -z "$group" && -n "$current_group" ]]; then
+                current_group=""
+                echo -e "  ${DIM}──${NC}" >/dev/tty
+            fi
+
+            # Item (highlighted if selected)
+            if (( item_index == selected )); then
+                echo -e "  ${PURPLE}${BOLD}▸ ${name}${NC}" >/dev/tty
+            else
+                echo -e "    ${name}" >/dev/tty
+            fi
+
+            (( item_index++ )) || true
+        done
+
+        echo -e "" >/dev/tty
+        echo -e "  ${DIM}↑↓ navigate  Enter select  q quit${NC}" >/dev/tty
+
+        # Read keypress
+        local input_char
+        IFS= read -rsn1 input_char </dev/tty
+
+        case "$input_char" in
+            $'\x1b')  # Escape sequence
+                read -rsn2 -t 0.1 input_char </dev/tty
+                case "$input_char" in
+                    '[A') (( selected > 0 )) && (( selected-- )) ;;          # Up
+                    '[B') (( selected < count - 1 )) && (( selected++ )) ;;   # Down
+                esac
+                ;;
+            '')  # Enter
+                IFS='|' read -r selected_key _ _ _ <<< "${items[$selected]}"
+                printf '\033[?25h' >/dev/tty
+                echo "$selected_key"
+                return 0
+                ;;
+            'q'|'Q')
+                printf '\033[?25h' >/dev/tty
+                echo "exit"
+                return 0
+                ;;
+            [0-9])
+                # Number shortcuts: 1-9 map to items 0-8, 0 = last (exit)
+                local num_target
+                if [[ "$input_char" == "0" ]]; then
+                    num_target=$(( count - 1 ))
+                else
+                    num_target=$(( input_char - 1 ))
+                fi
+                if (( num_target >= 0 && num_target < count )); then
+                    selected=$num_target
+                    IFS='|' read -r selected_key _ _ _ <<< "${items[$selected]}"
+                    printf '\033[?25h' >/dev/tty
+                    echo "$selected_key"
+                    return 0
+                fi
+                ;;
+        esac
+    done
+}
+
+menu_fzf() {
+    local items=("${MENU_ITEMS[@]}")
+    local current_group=""
+    local fzf_input=""
+
+    for item in "${items[@]}"; do
+        IFS='|' read -r key name desc group <<< "$item"
+
+        # Group separator (non-selectable)
+        if [[ -n "$group" && "$group" != "$current_group" ]]; then
+            current_group="$group"
+            fzf_input+="── ${current_group} ──\n"
+        elif [[ -z "$group" && -n "$current_group" ]]; then
+            current_group=""
+            fzf_input+="──\n"
+        fi
+
+        if [[ -n "$desc" ]]; then
+            fzf_input+="${key}|  ${name}  ·  ${desc}\n"
+        else
+            fzf_input+="${key}|  ${name}\n"
+        fi
+    done
+
+    local branch_badge=""
+    [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" [$ACTIVE_BRANCH]"
+
+    local result
+    result=$(echo -e "$fzf_input" | grep -v '^──' | fzf \
+        --height=~20 \
+        --layout=reverse \
+        --border=rounded \
+        --prompt="  " \
+        --header="🐝 Beeper Updater v${SCRIPT_VERSION}${branch_badge}" \
+        --header-first \
+        --delimiter='|' \
+        --with-nth=2 \
+        --ansi \
+        --no-info \
+        --color="header:#6953f2,pointer:#6953f2,marker:#50c878,prompt:#a08cff" \
+        2>/dev/null)
+
+    if [[ -n "$result" ]]; then
+        echo "$result" | cut -d'|' -f1
+    else
+        echo "exit"
+    fi
+}
+
+menu_dialog() {
+    local items=("${MENU_ITEMS[@]}")
+    local dialog_args=()
+    local current_group=""
+
+    for item in "${items[@]}"; do
+        IFS='|' read -r key name desc group <<< "$item"
+
+        # Group separator
+        if [[ -n "$group" && "$group" != "$current_group" ]]; then
+            current_group="$group"
+            dialog_args+=("" "── ${current_group} ──")
+        elif [[ -z "$group" && -n "$current_group" ]]; then
+            current_group=""
+            dialog_args+=("" "──")
+        fi
+
+        dialog_args+=("$key" "${name}${desc:+ — ${desc}}")
+    done
+
+    local branch_badge=""
+    [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" [$ACTIVE_BRANCH]"
+
+    local result
+    result=$(dialog \
+        --title "Beeper Updater v${SCRIPT_VERSION}${branch_badge}" \
+        --menu "Select an action:" \
+        20 60 12 \
+        "${dialog_args[@]}" \
+        2>&1 >/dev/tty) || true
+
+    if [[ -n "$result" ]]; then
+        echo "$result"
+    else
+        echo "exit"
+    fi
+}
+
+menu_whiptail() {
+    local items=("${MENU_ITEMS[@]}")
+    local wt_args=()
+    local current_group=""
+
+    for item in "${items[@]}"; do
+        IFS='|' read -r key name desc group <<< "$item"
+
+        if [[ -n "$group" && "$group" != "$current_group" ]]; then
+            current_group="$group"
+            wt_args+=("" "── ${current_group} ──")
+        elif [[ -z "$group" && -n "$current_group" ]]; then
+            current_group=""
+            wt_args+=("" "──")
+        fi
+
+        wt_args+=("$key" "${name}${desc:+ — ${desc}}")
+    done
+
+    local branch_badge=""
+    [[ "$ACTIVE_BRANCH" != "stable" ]] && branch_badge=" [$ACTIVE_BRANCH]"
+
+    local result
+    result=$(whiptail \
+        --title "Beeper Updater v${SCRIPT_VERSION}${branch_badge}" \
+        --menu "Select an action:" \
+        20 60 12 \
+        "${wt_args[@]}" \
+        3>&1 1>&2 2>&3) || true
+
+    if [[ -n "$result" ]]; then
+        echo "$result"
+    else
+        echo "exit"
+    fi
+}
+
+# Detect best available menu backend
+detect_menu_backend() {
+    if command -v fzf &>/dev/null; then echo "fzf"
+    elif command -v dialog &>/dev/null; then echo "dialog"
+    elif command -v whiptail &>/dev/null; then echo "whiptail"
+    else echo "bash"
+    fi
+}
+
+# Sub-menu for branch switching
+switch_branch_menu() {
+    local current="$ACTIVE_BRANCH"
+    local branches=("stable" "nightly")
+    local descs=("Production releases" "Pre-release fixes (~2 months ahead)")
+
+    print_header
+    log "  ${ACCENT}Current branch:${NC} ${BOLD}${current}${NC}"
+    log ""
+
+    local i=0
+    for b in "${branches[@]}"; do
+        (( i++ ))
+        if [[ "$b" == "$current" ]]; then
+            log "  ${PURPLE}${BOLD}${i}) ${b}${NC}  ${DIM}(current)${NC}  ${INFO}${descs[$((i-1))]}${NC}"
+        else
+            log "    ${i}) ${b}  ${INFO}${descs[$((i-1))]}${NC}"
+        fi
+    done
+
+    log ""
+    printf "  Select branch [1-${#branches[@]}, Enter to cancel]: "
+    local choice
+    read -r choice
+
+    case "$choice" in
+        1) write_config_branch "stable"; ACTIVE_BRANCH="stable"
+           BEEPER_API="${BEEPER_API_TEMPLATE/\%s/$ACTIVE_BRANCH}"
+           [[ "$current" != "stable" ]] && pass "Switched to ${BOLD}stable${NC}" || pass "Already on ${BOLD}stable${NC}" ;;
+        2) write_config_branch "nightly"; ACTIVE_BRANCH="nightly"
+           BEEPER_API="${BEEPER_API_TEMPLATE/\%s/$ACTIVE_BRANCH}"
+           [[ "$current" != "nightly" ]] && pass "Switched to ${BOLD}nightly${NC}" || pass "Already on ${BOLD}nightly${NC}" ;;
+        *) detail "Cancelled" ;;
+    esac
+    log ""
+}
+
+# Main menu loop
+show_menu() {
+    local backend
+    backend=$(detect_menu_backend)
+
+    while true; do
+        local selected
+        case "$backend" in
+            fzf)      selected=$(menu_fzf) ;;
+            dialog)   selected=$(menu_dialog) ;;
+            whiptail) selected=$(menu_whiptail) ;;
+            bash)     selected=$(menu_bash) ;;
+        esac
+
+        case "$selected" in
+            update)        return 0 ;;  # Continue to main update flow
+            switch-branch) switch_branch_menu; continue ;;
+            rollback)      DO_ROLLBACK=true; return 0 ;;
+            dry-run)       DRY_RUN=true; return 0 ;;
+            check)         CHECK_ONLY=true; return 0 ;;
+            branch-status) SHOW_VERSIONS=true; return 0 ;;
+            whats-new)     SHOW_WHATS_NEW=true; return 0 ;;
+            changelog)     SHOW_CHANGELOG=true; return 0 ;;
+            history)       { cat "$HISTORY_FILE" 2>/dev/null || echo "No update history yet."; } | less -R 2>/dev/null || true; continue ;;
+            desktop)       CHECK_DESKTOP=true; return 0 ;;
+            help)          ( usage ); continue ;;
+            exit|"")       exit 0 ;;
+        esac
+    done
+}
+
+# Interactive menu: show when no flags passed and running in a TTY
+_any_flag_set=false
+if $CHECK_ONLY || $NOTIFY || $FORCE || $SHOW_CHANGELOG || $QUIET || \
+   $DO_ROLLBACK || $SHOW_VERSIONS || $SKIP_CHECKSUM || $DRY_RUN || \
+   $CHECK_DESKTOP || $SHOW_WHATS_NEW || $SHOW_BRANCH || \
+   [[ -n "$SET_BRANCH" ]]; then
+    _any_flag_set=true
+fi
+
+if [[ "$SHOW_MENU" == true ]] || { [[ "$_any_flag_set" == false ]] && [[ -t 0 ]]; }; then
+    show_menu
+fi
 
 check_versions() {
     # Get installed version - ALWAYS check package.json first (source of truth)
@@ -478,19 +1115,22 @@ check_versions() {
         INSTALLED=$(pacman -Q beeper-v4-bin 2>/dev/null | awk '{print $2}' | cut -d'-' -f1)
     fi
 
-    # Resolve latest version from Beeper API redirect chain.
-    # The API returns a 302 redirect to a CDN URL with the version in the filename.
-    # We use progressive strategies to get that URL without downloading the ~200MB AppImage.
-    # Each strategy is faster but less compatible; fallback ensures resilience.
+    # Resolve the final URL using HEAD, so the AppImage body is not downloaded.
     DOWNLOAD_URL=""
     LATEST="unknown"
+    local api_response
+    api_response=$(curl -ILs -m 10 -o /dev/null -w "%{http_code}\n%{url_effective}" "$BEEPER_API" 2>/dev/null) || true
+    local http_status
+    http_status=$(echo "$api_response" | head -1)
+    if [[ "$http_status" =~ ^(200|301|302)$ ]]; then
+        DOWNLOAD_URL=$(echo "$api_response" | tail -1)
+    fi
 
-    # Strategy 1: HEAD request — get Location header without following redirect (~0.7s)
-    # HTTP-correct: zero body transfer. Only works for single-hop redirects;
-    # the Beeper-* guard safely rejects intermediate URLs if multi-hop.
-    local headers
-    headers=$(curl -sI -m 10 "$BEEPER_API" 2>/dev/null) || true
-    if [[ -n "$headers" ]]; then
+    # Some endpoints do not support a followed HEAD request. Inspect the first
+    # redirect as a fallback, still without transferring the AppImage body.
+    if [[ "$DOWNLOAD_URL" != *"Beeper-"* ]]; then
+        local headers
+        headers=$(curl -sI -m 10 "$BEEPER_API" 2>/dev/null) || true
         local location
         location=$(echo "$headers" | grep -i '^location:' | head -1 | sed -E 's/^[^:]+:[[:space:]]*//' | tr -d '\r\n')
         if [[ -n "$location" && "$location" == *"Beeper-"* ]]; then
@@ -519,9 +1159,9 @@ check_versions() {
 
     # Extract version from resolved URL (filename only to avoid CDN path false positives)
     if [[ -n "$DOWNLOAD_URL" ]]; then
-        LATEST=$(basename "$DOWNLOAD_URL" | grep -oP 'Beeper-\K[0-9]+\.[0-9]+\.[0-9]+')
+        LATEST=$(basename "$DOWNLOAD_URL" | grep -oP 'Beeper(-[A-Za-z]+)?-\K[0-9]+\.[0-9]+\.[0-9]+' || true)
         if [[ -z "$LATEST" ]]; then
-            LATEST=$(basename "$DOWNLOAD_URL" | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            LATEST=$(basename "$DOWNLOAD_URL" | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
         fi
     fi
 
@@ -676,30 +1316,26 @@ show_versions() {
 
     print_header
     log ""
-    log "  ${ACCENT}Installed${NC}  ${BOLD}${INSTALLED:-unknown}${NC}"
-    log "  ${ACCENT}Latest${NC}     ${BOLD}${LATEST:-unknown}${NC}"
-    log "  ${ACCENT}AUR${NC}        ${INFO}${AUR:-unknown}${NC}"
-    if [[ "$PACMAN_TRACKED" == true ]]; then
-        log "  ${ACCENT}Pacman${NC}     ${OK}tracked${NC}"
-    else
-        log "  ${ACCENT}Pacman${NC}     ${WARN}untracked${NC}"
-    fi
-    log ""
+    box_top "${ACTIVE_BRANCH}"
+    box_row "${ACCENT}Active branch${NC}   ${BOLD}${ACTIVE_BRANCH}${NC}"
+    box_row "${ACCENT}Installed${NC}       ${BOLD}${INSTALLED:-unknown}${NC}"
+    box_blank
 
-    if [[ -n "$INSTALLED" ]] && [[ "$INSTALLED" != "unknown" ]] && \
-       [[ -n "$LATEST" ]] && [[ "$LATEST" != "unknown" ]]; then
+    # Show current branch latest
+    if [[ -n "$INSTALLED" && "$INSTALLED" != "unknown" && -n "$LATEST" && "$LATEST" != "unknown" ]]; then
         if version_gte "$INSTALLED" "$LATEST"; then
-            pass "On the latest version"
+            box_row "${ACCENT}${ACTIVE_BRANCH}${NC}$(printf '%*s' $((14 - ${#ACTIVE_BRANCH})) '')${BOLD}${LATEST}${NC}  ${OK}✓ up to date${NC}"
         else
-            warn "Update available: $INSTALLED → $LATEST"
+            box_row "${ACCENT}${ACTIVE_BRANCH}${NC}$(printf '%*s' $((14 - ${#ACTIVE_BRANCH})) '')${BOLD}${LATEST}${NC}  ${WARN}⬆ update available${NC}"
         fi
+    else
+        box_row "${ACCENT}${ACTIVE_BRANCH}${NC}$(printf '%*s' $((14 - ${#ACTIVE_BRANCH})) '')${BOLD}${LATEST:-unknown}${NC}"
     fi
 
-    if [[ -n "$AUR" ]] && [[ "$AUR" != "unknown" ]] && \
-       [[ -n "$LATEST" ]] && [[ "$LATEST" != "unknown" ]] && \
-       ! version_gte "$AUR" "$LATEST"; then
-        hint "AUR is behind (update-beeper uses direct download)"
-    fi
+    box_blank
+    box_row "${ACCENT}AUR${NC}             ${INFO}${AUR:-unknown}${NC}"
+    box_row "${ACCENT}Pacman${NC}          $(if [[ "$PACMAN_TRACKED" == true ]]; then echo -e "${OK}tracked${NC}"; else echo -e "${WARN}untracked${NC}"; fi)"
+    box_bottom
     log ""
 
     exit 0
@@ -1133,7 +1769,7 @@ fix_and_retry() {
 backup_current() {
     if [[ -d "$INSTALL_DIR" ]]; then
         sudo mkdir -p "$BACKUP_DIR"
-        ROLLBACK_BACKUP="beeper-backup-$(date +%Y%m%d-%H%M%S)"
+        ROLLBACK_BACKUP="beeper-backup-${INSTALLED}-${ACTIVE_BRANCH}"
         action "Creating backup: $ROLLBACK_BACKUP"
         sudo cp -a "$INSTALL_DIR" "$BACKUP_DIR/$ROLLBACK_BACKUP"
 
@@ -1483,9 +2119,10 @@ do_direct_install() {
     check_reset
     verify_disk_space "/tmp" "$MIN_FREE_SPACE_MB"
     verify_disk_space "/opt" 1200
+    local disk_failures=$_check_failures
     check_flush
 
-    if [[ $_check_failures -gt 0 ]]; then
+    if [[ $disk_failures -gt 0 ]]; then
         hint "sudo rm -rf /tmp/beeper-update /opt/beeper-backups/*"
         return 1
     fi
@@ -1684,6 +2321,33 @@ if [[ "$SHOW_CHANGELOG" == true ]]; then
     exit $?
 fi
 
+# Handle branch set/show (early exit)
+if [[ -n "$SET_BRANCH" ]]; then
+    old_branch="$ACTIVE_BRANCH"
+    write_config_branch "$SET_BRANCH"
+    ACTIVE_BRANCH="$SET_BRANCH"
+    BEEPER_API="${BEEPER_API_TEMPLATE/\%s/$ACTIVE_BRANCH}"
+    print_header
+    if [[ "$old_branch" == "$SET_BRANCH" ]]; then
+        pass "Already on ${BOLD}${SET_BRANCH}${NC} branch"
+    else
+        pass "Switched from ${BOLD}${old_branch}${NC} to ${BOLD}${SET_BRANCH}${NC}"
+    fi
+    log ""
+    exit 0
+fi
+
+if [[ "$SHOW_BRANCH" == true ]]; then
+    echo "$ACTIVE_BRANCH"
+    exit 0
+fi
+
+# Handle what's new display (early exit)
+if [[ "$SHOW_WHATS_NEW" == true ]]; then
+    show_whats_new
+    exit $?
+fi
+
 # Handle versions display (early exit)
 if [[ "$SHOW_VERSIONS" == true ]]; then
     show_versions
@@ -1770,20 +2434,20 @@ fi
 # Dry-run mode: show what would happen without doing anything
 if [[ "$DRY_RUN" == true ]]; then
     log ""
-    log "  ${INFO}╭──────────────────────────────────────╮${NC}"
-    pad_row "${ACCENT}${BOLD}Dry run${NC} — no changes"
-    log "  ${INFO}│${NC}$(printf '%*s' 39 '')${INFO}│${NC}"
-    pad_row "${ACCENT}Version${NC}   ${INSTALLED:-unknown} → $LATEST"
+    box_top
+    box_row "${ACCENT}${BOLD}Dry run${NC} — no changes"
+    box_blank
+    box_row "${ACCENT}Version${NC}   ${INSTALLED:-unknown} → $LATEST"
     if [[ "$AUR" != "unknown" ]] && version_gte "$AUR" "$LATEST"; then
-        pad_row "${ACCENT}Method${NC}    AUR (yay)"
+        box_row "${ACCENT}Method${NC}    AUR (yay)"
     elif [[ "$AUR" != "unknown" ]]; then
-        pad_row "${ACCENT}Method${NC}    Direct install (AUR behind)"
+        box_row "${ACCENT}Method${NC}    Direct install (AUR behind)"
     else
-        pad_row "${ACCENT}Method${NC}    Direct install"
+        box_row "${ACCENT}Method${NC}    Direct install"
     fi
-    pad_row "${ACCENT}Pacman${NC}    $(if [[ "$PACMAN_TRACKED" == true ]]; then echo "tracked"; else echo "untracked"; fi)"
-    pad_row "${ACCENT}Backup${NC}    $BACKUP_DIR"
-    log "  ${INFO}╰──────────────────────────────────────╯${NC}"
+    box_row "${ACCENT}Pacman${NC}    $(if [[ "$PACMAN_TRACKED" == true ]]; then echo "tracked"; else echo "untracked"; fi)"
+    box_row "${ACCENT}Backup${NC}    $BACKUP_DIR"
+    box_bottom
     log ""
     hint "Run without --dry-run to perform the update."
     log_event "DRY_RUN from=${INSTALLED:-unknown} to=$LATEST"

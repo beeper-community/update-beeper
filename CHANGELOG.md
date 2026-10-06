@@ -5,28 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - Unreleased
+
+### Added
+
+- Interactive CLI menu with progressive backend detection (fzf → dialog → whiptail → pure bash)
+- Branch support: switch between stable and nightly channels (`--branch`)
+- In-terminal changelog display with version diffs (`--whats-new`)
+- Unified box rendering system with dynamic terminal-width adaptation
+- Data fetching from beeper-intel with 6-hour local cache
+- beeper-intel GitHub Action for automated version polling and changelog scraping
+
+### Changed
+
+- `--changelog` now shows formatted changelog in terminal (falls back to browser)
+- `--versions` now shows multi-branch status
+- Running with no flags in TTY shows interactive menu (auto-update still works in cron/systemd)
+
+### Technical
+
+- Refactored summary_box and dry-run panel to shared box primitives
+- Branch config persists in `~/.config/update-beeper/config`
+- Cache stored in `~/.cache/update-beeper/`
+
+### Fixed during integration
+
+- Current Beeper AppImages store `package.json` in `app.asar`; extract metadata before validation.
+- Accept passwordless sudo access without an unnecessary password prompt.
+- Launch Beeper outside the updater service so it survives the update check.
+- Stop only the Beeper browser process during restart, allowing Electron helpers to exit cleanly.
+
 ## [1.8.1] - 2026-03-17
 
 ### Fixed
 
-- **API version check timeout** — The curl call followed the API redirect (`-L`) and started downloading the ~200MB AppImage to `/dev/null`, always timing out (exit code 28) on slower connections
-- **Version extraction false positives** — Fallback regex could match semver patterns in CDN domain/path prefixes (e.g., `cdn-v3.example.com`); now restricted to filename via `basename`
+- **API version check timeout** — Resolve the Beeper redirect without downloading the AppImage body.
+- **Version extraction false positives** — Restrict version matching to the downloaded filename.
 
 ### Changed
 
-- **Progressive URL resolution** — Replaced single curl call with 3-strategy fallback:
-  1. **HEAD request** — reads Location header without following redirect (~0.7s)
-  2. **Range 0-0** — follows redirects, requests 1 byte only (~1.0s)
-  3. **Full GET** — last resort with `--max-filesize 1MB` bandwidth cap (~10s)
-- **`set -e` safety** — All curl calls in version check now have `|| true` to prevent silent failures during future refactoring
-- **Case-insensitive header parsing** — Location header extraction handles all case forms (`Location:`, `location:`, `LOCATION:`)
-
-### Performance
-
-| Metric | Before | After |
-|--------|--------|-------|
-| Version check | 30s timeout → exit 28 | **0.7s** → success |
-| Full script to prereqs | Never reached | **4.1s** |
+- **Progressive URL resolution** — HEAD request, range request, then a bandwidth-capped GET as fallbacks.
+- **`set -e` safety** — URL checks tolerate curl failures and report an unknown version.
 
 ## [1.8.0] - 2026-03-09
 
@@ -291,6 +310,7 @@ The app downloads updates but can't overwrite pacman-managed files. This script
 downloads directly from Beeper's API, bypassing both the broken built-in updater
 and the often-outdated AUR package.
 
+[1.9.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.9.0
 [1.8.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.8.0
 [1.7.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.7.0
 [1.6.0]: https://github.com/beeper-community/update-beeper/releases/tag/v1.6.0
