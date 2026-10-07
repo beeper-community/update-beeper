@@ -1,6 +1,6 @@
 # update-beeper
 
-An interactive terminal updater for Beeper Desktop on x86_64 Linux, built for Arch Linux and Wayland desktops. It checks Beeper's stable or nightly channel, installs the current AppImage, verifies the result, and keeps backups for recovery. A systemd user timer can run the same updater automatically.
+An interactive terminal updater for Beeper Desktop on x86_64 Linux, built for Arch Linux and Wayland desktops. It checks Beeper's stable or nightly channel, installs the current AppImage, verifies the result, and keeps backups for recovery. A systemd user timer can run the same updater automatically. A separate Windows PowerShell companion checks stable and nightly releases and can open a verified installer on request.
 
 > **Release status:** The v1.9.0 code is on `master`, but has not yet been tagged as a release. The commands below install the current `master` version.
 
@@ -136,6 +136,22 @@ update-beeper --automation-status
 Run these commands from a repository checkout. For a remote install, download the equivalent `master/systemd/update-beeper-user.service` and `.timer` files. The timer uses your selected channel. Background runs need sudo access that works without a terminal, such as an appropriate sudoers rule; they cannot answer a password prompt.
 
 Inspect a run with `systemctl --user status update-beeper.service` or `journalctl --user -u update-beeper.service`. The repository also contains system service templates for manually managed setups; the user service is the normal desktop choice.
+
+## Windows companion
+
+The Linux updater solves a pacman ownership problem that does not apply to Beeper's normal Windows installation. Windows has official [stable](https://www.beeper.com/download/windows) and [nightly](https://www.beeper.com/download/nightly) installers for x64 and ARM64. Use Beeper's normal update flow for routine stable releases. The [PowerShell companion](windows/update-beeper.ps1) adds a quick comparison of installed, stable, and nightly versions and an explicit way to install either channel.
+
+Run these commands in PowerShell from a repository checkout on Windows:
+
+```powershell
+.\windows\update-beeper.ps1                   # Read-only version check
+.\windows\update-beeper.ps1 -Channel nightly  # Check the nightly version
+.\windows\update-beeper.ps1 -Channel nightly -DownloadOnly  # Stage a verified installer
+.\windows\update-beeper.ps1 -Channel nightly -Install  # Install nightly interactively
+.\windows\update-beeper.ps1 -Channel stable -Install   # Return to stable
+```
+
+`-DownloadOnly` stages the installer in the user's temporary directory without running it. `-Install` requires Beeper to be closed. Both actions download from Beeper's update feed, check its advertised size and SHA-512, and verify a valid Automattic Authenticode signature. `-Install` then opens the normal installer and checks the installed version afterward. `-Force` with `-Install` reinstalls the selected version, including a same-version channel switch. `-Architecture x64` or `-Architecture arm64` overrides automatic CPU detection. The helper does not change Beeper's in-app update settings or schedule background installation. Windows PowerShell 5.1 or PowerShell 7 is required; downloads use the bundled `curl.exe`. The read-only check does not need administrator rights.
 
 ## Desktop and release notes
 

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unified box rendering system with dynamic terminal-width adaptation
 - Data fetching from beeper-intel with 6-hour local cache
 - beeper-intel GitHub Action for automated version polling and changelog scraping
+- Windows PowerShell companion for stable/nightly version checks and verified interactive installer downloads (x64 and ARM64)
 
 ### Changed
 
