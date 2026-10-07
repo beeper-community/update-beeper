@@ -3,9 +3,11 @@
 # Or for specific files: sha256sum -c checksums.sha256 --ignore-missing
 #
 # Generated automatically by GitHub Actions on each release
-# Manual generation: sha256sum update-beeper beeper-version beeper-health install.sh > checksums.sha256
+# Manual generation: sha256sum update-beeper beeper-version beeper-health beeper-changes.py install.sh windows/update-beeper.ps1 > checksums.sha256
 
-1fe6307116e985276c31a394546b1b14542d5ab162231e2f96744fcd0e0bc8c3  update-beeper
+8b82b5863de79c8f5d83336c79e61ef656d5b918618bb77a29d950fba24ba796  update-beeper
 e0d05fd668f71823f8ec052e028eec14fa1512d517809ac7ea8b3e13c47038fd  beeper-version
 089a5ae14b63f7aade976cc6b3e0b6d27eda2cf18180e2152401094e02616984  beeper-health
-8256006580a8c9ae03235af1c0a78a2fff908a9662372892201bb14d6df94a1b  install.sh
+92533d252f338bd9aa848e80131bc64b6c4725cad35b8507c33303944c55476d  beeper-changes.py
+16c476f387cc6d4d6208d24ea0b0efed3c8f24a4353eabad5a3f85bc4618800b  install.sh
+6ef600754d3eb5eb1b623dc8892eb93b7590d150ac0728c9d59d71f338a03e52  windows/update-beeper.ps1

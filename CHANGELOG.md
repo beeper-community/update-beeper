@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Data fetching from beeper-intel with 6-hour local cache
 - beeper-intel GitHub Action for automated version polling and changelog scraping
 - Windows PowerShell companion for stable/nightly version checks and verified interactive installer downloads (x64 and ARM64)
+- Build-to-build changelog checker using Beeper's official desktop releases, with Windows `-Changes` integration and explicit coverage gaps for nightlies
 
 ### Changed
 

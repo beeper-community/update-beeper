@@ -7,7 +7,9 @@ on:
       - 'update-beeper'
       - 'beeper-version'
       - 'beeper-health'
+      - 'beeper-changes.py'
       - 'install.sh'
+      - 'windows/update-beeper.ps1'
   release:
     types: [published]
   workflow_dispatch: # Allow manual trigger
@@ -24,7 +26,7 @@ jobs:
       - name: Generate SHA256 checksums
         run: |
           # Generate checksums for all scripts
-          sha256sum update-beeper beeper-version beeper-health install.sh > checksums.sha256.tmp
+          sha256sum update-beeper beeper-version beeper-health beeper-changes.py install.sh windows/update-beeper.ps1 > checksums.sha256.tmp
 
           # Create checksums file with header
           cat > checksums.sha256 << 'EOF'
@@ -33,7 +35,7 @@ jobs:
           # Or for specific files: sha256sum -c checksums.sha256 --ignore-missing
           #
           # Generated automatically by GitHub Actions on each release
-          # Manual generation: sha256sum update-beeper beeper-version beeper-health install.sh > checksums.sha256
+          # Manual generation: sha256sum update-beeper beeper-version beeper-health beeper-changes.py install.sh windows/update-beeper.ps1 > checksums.sha256
 
           EOF
 

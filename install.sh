@@ -52,6 +52,7 @@ if [[ -f "update-beeper" ]] && [[ -f "beeper-version" ]]; then
     cp update-beeper "$INSTALL_DIR/" || error_exit "Failed to copy update-beeper"
     cp beeper-version "$INSTALL_DIR/" || error_exit "Failed to copy beeper-version"
     cp beeper-health "$INSTALL_DIR/" || error_exit "Failed to copy beeper-health"
+    cp beeper-changes.py "$INSTALL_DIR/" || error_exit "Failed to copy beeper-changes.py"
 else
     # Remote install via curl
     echo "   Downloading update-beeper..."
@@ -62,12 +63,16 @@ else
 
     echo "   Downloading beeper-health..."
     curl -fsSL "$REPO/beeper-health" -o "$INSTALL_DIR/beeper-health" || error_exit "Failed to download beeper-health"
+
+    echo "   Downloading beeper-changes.py..."
+    curl -fsSL "$REPO/beeper-changes.py" -o "$INSTALL_DIR/beeper-changes.py" || error_exit "Failed to download beeper-changes.py"
 fi
 
 # Make executable
 chmod +x "$INSTALL_DIR/update-beeper" || error_exit "Failed to make update-beeper executable"
 chmod +x "$INSTALL_DIR/beeper-version" || error_exit "Failed to make beeper-version executable"
 chmod +x "$INSTALL_DIR/beeper-health" || error_exit "Failed to make beeper-health executable"
+chmod +x "$INSTALL_DIR/beeper-changes.py" || error_exit "Failed to make beeper-changes.py executable"
 
 echo ""
 echo -e "${GREEN}✓ Installed successfully!${NC}"
@@ -88,6 +93,7 @@ else
     echo "     update-beeper    - Update Beeper to latest version"
     echo "     beeper-version   - Check version status"
     echo "     beeper-health    - Monitor Beeper + validate desktop shortcut"
+    echo "     beeper-changes.py - Compare published release notes between builds"
 fi
 
 echo ""

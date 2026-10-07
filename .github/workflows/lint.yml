@@ -49,4 +49,5 @@ jobs:
               bash -n "$script"
             fi
           done
+          python3 -m py_compile beeper-changes.py
           echo "✓ All scripts have valid syntax"

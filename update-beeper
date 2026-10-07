@@ -5,6 +5,7 @@
 set -e
 
 SCRIPT_VERSION="1.9.0"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOCKFILE="/tmp/update-beeper.lock"
 # BEEPER_API is set dynamically after branch config is read (see ACTIVE_BRANCH)
 CHANGELOG_URL="https://www.beeper.com/changelog/desktop"
@@ -192,6 +193,8 @@ SHOW_MENU=false
 SHOW_AUTOMATION=false
 SET_BRANCH=""
 SHOW_BRANCH=false
+COMPARE_FROM=""
+COMPARE_TO=""
 
 # Track which backup to use for rollback
 ROLLBACK_BACKUP=""
@@ -215,6 +218,7 @@ usage() {
     echo "  --version, -v     Show script version"
     echo "  --branch [NAME]   Set or show update channel (stable, nightly)"
     echo "  --whats-new, -w   Show changes since installed version"
+    echo "  --compare FROM [TO]  Show official notes between builds (TO defaults to latest channel)"
     echo "  --menu, -m        Force interactive menu"
     echo "  --help, -h        Show this help message"
     echo ""
@@ -262,6 +266,15 @@ while [[ $# -gt 0 ]]; do
             fi
             ;;
         --whats-new|-w) SHOW_WHATS_NEW=true; shift ;;
+        --compare)
+            if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+                echo "--compare requires a starting build" >&2; exit 1
+            fi
+            COMPARE_FROM="$2"; shift 2
+            if [[ -n "${1:-}" && "$1" != --* ]]; then
+                COMPARE_TO="$1"; shift
+            fi
+            ;;
         --menu|-m) SHOW_MENU=true; shift ;;
         *) echo "Unknown option: $1"; usage ;;
     esac
@@ -696,6 +709,10 @@ show_changelog() {
 }
 
 show_whats_new() {
+    if [[ -f "$SCRIPT_DIR/beeper-changes.py" ]] && command -v python3 >/dev/null 2>&1; then
+        python3 "$SCRIPT_DIR/beeper-changes.py" --channel "$ACTIVE_BRANCH"
+        return $?
+    fi
     local installed=""
     if [[ -f "$INSTALL_DIR/resources/app/package.json" ]]; then
         installed=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$INSTALL_DIR/resources/app/package.json" | head -1)
@@ -821,7 +838,8 @@ MENU_ITEMS=(
     "dry-run|Preview update|See version, source, and backup|Update"
     "check|Check for updates|Compare installed and selected channel|Explore"
     "branch-status|Channel versions|Installed, stable, nightly, and AUR|Explore"
-    "whats-new|What's new|Changes since your installed version|Explore"
+    "whats-new|What's new|Official notes since your installed version|Explore"
+    "compare-builds|Compare builds|Official notes between two versions|Explore"
     "changelog|Release notes|Browse available changelog entries|Explore"
     "history|Update history|Past installs and rollbacks|Explore"
     "desktop|Check desktop shortcut|Launcher, version, and icon|Maintenance"
@@ -1109,6 +1127,31 @@ switch_branch_menu() {
     log ""
 }
 
+compare_builds_menu() {
+    if [[ ! -f "$SCRIPT_DIR/beeper-changes.py" ]] || ! command -v python3 >/dev/null 2>&1; then
+        warn "Build comparison requires Python 3 and beeper-changes.py beside update-beeper."
+        read -r -p "  Press Enter to return to the menu..." </dev/tty
+        return
+    fi
+    local installed="" from="" to=""
+    if [[ -f "$INSTALL_DIR/resources/app/package.json" ]]; then
+        installed=$(grep -oP '"version":\s*"\K[0-9]+\.[0-9]+\.[0-9]+' \
+            "$INSTALL_DIR/resources/app/package.json" | head -1 || true)
+    fi
+    print_header
+    log "  ${ACCENT}${BOLD}Compare Beeper builds${NC}"
+    log ""
+    read -r -p "  From build${installed:+ [$installed]}: " from </dev/tty
+    read -r -p "  To build [latest $ACTIVE_BRANCH]: " to </dev/tty
+    [[ -z "$from" ]] && from="$installed"
+    local args=(--channel "$ACTIVE_BRANCH")
+    [[ -n "$from" ]] && args+=(--from "$from")
+    [[ -n "$to" ]] && args+=(--to "$to")
+    log ""
+    python3 "$SCRIPT_DIR/beeper-changes.py" "${args[@]}" || true
+    read -r -p "  Press Enter to return to the menu..." </dev/tty
+}
+
 # Main menu loop
 show_menu() {
     local backend
@@ -1133,6 +1176,7 @@ show_menu() {
             check)         CHECK_ONLY=true; return 0 ;;
             branch-status) SHOW_VERSIONS=true; return 0 ;;
             whats-new)     SHOW_WHATS_NEW=true; return 0 ;;
+            compare-builds) compare_builds_menu; continue ;;
             changelog)     SHOW_CHANGELOG=true; return 0 ;;
             history)       { cat "$HISTORY_FILE" 2>/dev/null || echo "No update history yet."; } | less -R 2>/dev/null || true; continue ;;
             desktop)       CHECK_DESKTOP=true; return 0 ;;
@@ -1148,7 +1192,7 @@ _any_flag_set=false
 if $CHECK_ONLY || $NOTIFY || $FORCE || $SHOW_CHANGELOG || $QUIET || \
    $DO_ROLLBACK || $SHOW_VERSIONS || $SKIP_CHECKSUM || $DRY_RUN || \
    $CHECK_DESKTOP || $SHOW_WHATS_NEW || $SHOW_BRANCH || $SHOW_AUTOMATION || \
-   [[ -n "$SET_BRANCH" ]]; then
+   [[ -n "$SET_BRANCH" ]] || [[ -n "$COMPARE_FROM" ]]; then
     _any_flag_set=true
 fi
 
@@ -2398,6 +2442,16 @@ perform_update() {
 #──────────────────────────────────────────────────────────────────────────────
 # MAIN ENTRY POINT
 #──────────────────────────────────────────────────────────────────────────────
+
+if [[ -n "$COMPARE_FROM" ]]; then
+    if ! command -v python3 >/dev/null 2>&1 || [[ ! -f "$SCRIPT_DIR/beeper-changes.py" ]]; then
+        echo "Build comparison requires Python 3 and beeper-changes.py beside update-beeper." >&2
+        exit 1
+    fi
+    compare_args=(--from "$COMPARE_FROM" --channel "$ACTIVE_BRANCH")
+    [[ -n "$COMPARE_TO" ]] && compare_args+=(--to "$COMPARE_TO")
+    exec python3 "$SCRIPT_DIR/beeper-changes.py" "${compare_args[@]}"
+fi
 
 # Acquire lock early (prevents concurrent runs)
 acquire_lock

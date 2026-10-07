@@ -7,6 +7,7 @@ on:
       - 'install.sh'
       - 'update-beeper'
       - 'beeper-version'
+      - 'beeper-changes.py'
       - '.github/workflows/test-install.yml'
   pull_request:
     branches: [master, main]
@@ -14,6 +15,7 @@ on:
       - 'install.sh'
       - 'update-beeper'
       - 'beeper-version'
+      - 'beeper-changes.py'
   workflow_dispatch:
 
 jobs:
@@ -47,6 +49,12 @@ jobs:
             exit 1
           fi
           echo "✓ beeper-version installed"
+
+          if [[ ! -x "$HOME/.local/bin/beeper-changes.py" ]]; then
+            echo "❌ beeper-changes.py not installed or not executable"
+            exit 1
+          fi
+          echo "✓ beeper-changes.py installed"
 
           # Verify executable permissions
           if [[ ! -x "$HOME/.local/bin/update-beeper" ]]; then
@@ -96,7 +104,7 @@ jobs:
           REPO="http://localhost:8000"
 
           # Create modified install script for testing
-          sed "s|https://raw.githubusercontent.com/robertogogoni/update-beeper/main|$REPO|g" install.sh > /tmp/test-install.sh
+          sed "s|https://raw.githubusercontent.com/beeper-community/update-beeper/master|$REPO|g" install.sh > /tmp/test-install.sh
           chmod +x /tmp/test-install.sh
 
           # Run the modified install script
@@ -117,6 +125,12 @@ jobs:
             exit 1
           fi
           echo "✓ beeper-version installed"
+
+          if [[ ! -x "$HOME/.local/bin/beeper-changes.py" ]]; then
+            echo "❌ beeper-changes.py not installed or not executable"
+            exit 1
+          fi
+          echo "✓ beeper-changes.py installed"
 
           echo ""
           echo "=== Remote install test PASSED ==="

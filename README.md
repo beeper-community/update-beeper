@@ -15,7 +15,7 @@ cd update-beeper
 update-beeper                  # Open the terminal menu
 ```
 
-The installer copies `update-beeper`, `beeper-version`, and `beeper-health` to `~/.local/bin`. Add that directory to `PATH` if needed. Running `./install.sh` from a checkout installs that checkout; the remote installer below fetches `master`:
+The installer copies `update-beeper`, `beeper-version`, `beeper-health`, and `beeper-changes.py` to `~/.local/bin`. Add that directory to `PATH` if needed. Running `./install.sh` from a checkout installs that checkout; the remote installer below fetches `master`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/beeper-community/update-beeper/master/install.sh | bash
@@ -42,6 +42,7 @@ flowchart TD
     Explore --> Check[Check for updates]
     Explore --> Versions[Channel versions]
     Explore --> Notes[What's new and release notes]
+    Explore --> Compare[Compare any two builds]
     Explore --> History[Update history]
     Maintenance --> Desktop[Check desktop shortcut]
     Maintenance --> Timer[Automatic update status]
@@ -65,6 +66,8 @@ update-beeper --branch            # Show selected channel
 update-beeper --branch nightly    # Select nightly for future updates
 update-beeper --branch stable     # Return to stable
 update-beeper --dry-run           # Preview an available update
+update-beeper --compare 4.3.144 4.3.183  # Published changes between builds
+update-beeper --whats-new         # Official notes since the installed build
 update-beeper --force             # Reinstall even when already current
 update-beeper --rollback          # Restore the newest backup
 update-beeper --automation-status # Timer, next check, and last result
@@ -80,6 +83,7 @@ update-beeper --automation-status # Timer, next check, and last result
 | `--branch [stable\|nightly]` | Show or save the selected channel. |
 | `--versions` | Show installed and available versions, including AUR when known. |
 | `--whats-new`, `-w` | Show changes since the installed version when notes are available. |
+| `--compare FROM [TO]` | Show official published notes between builds; TO defaults to the latest selected channel. |
 | `--changelog`, `-l` | Show cached notes in the terminal, or open Beeper's notes in a browser. |
 | `--history` | Print local update history. |
 | `--check-desktop` | Validate the shortcut, executable, version, and icon. |
@@ -146,18 +150,32 @@ Run these commands in PowerShell from a repository checkout on Windows:
 ```powershell
 .\windows\update-beeper.ps1                   # Read-only version check
 .\windows\update-beeper.ps1 -Channel nightly  # Check the nightly version
+.\windows\update-beeper.ps1 -Changes -Channel nightly  # Changes since installed build
+.\windows\update-beeper.ps1 -Changes -FromVersion 4.3.144 -ToVersion 4.3.183
 .\windows\update-beeper.ps1 -Channel nightly -DownloadOnly  # Stage a verified installer
 .\windows\update-beeper.ps1 -Channel nightly -Install  # Install nightly interactively
 .\windows\update-beeper.ps1 -Channel stable -Install   # Return to stable
 ```
 
-`-DownloadOnly` stages the installer in the user's temporary directory without running it. `-Install` requires Beeper to be closed. Both actions download from Beeper's update feed, check its advertised size and SHA-512, and verify a valid Automattic Authenticode signature. `-Install` then opens the normal installer and checks the installed version afterward. `-Force` with `-Install` reinstalls the selected version, including a same-version channel switch. `-Architecture x64` or `-Architecture arm64` overrides automatic CPU detection. The helper does not change Beeper's in-app update settings or schedule background installation. Windows PowerShell 5.1 or PowerShell 7 is required; downloads use the bundled `curl.exe`. The read-only check does not need administrator rights.
+`-Changes` compares builds with the official desktop changelog through [beeper-changes.py](beeper-changes.py) and requires Python 3. `-DownloadOnly` stages the installer in the user's temporary directory without running it. `-Install` requires Beeper to be closed. Both actions download from Beeper's update feed, check its advertised size and SHA-512, and verify a valid Automattic Authenticode signature. `-Install` then opens the normal installer and checks the installed version afterward. `-Force` with `-Install` reinstalls the selected version, including a same-version channel switch. `-Architecture x64` or `-Architecture arm64` overrides automatic CPU detection. The helper does not change Beeper's in-app update settings or schedule background installation. Windows PowerShell 5.1 or PowerShell 7 is required; downloads use the bundled `curl.exe`. The read-only check does not need administrator rights.
+
+### Build-to-build changes on Linux or Windows
+
+The standalone checker uses Python's standard library and Beeper's official desktop changelog API. It accepts any two three-part build numbers, or detects the installed build and checks through the selected channel's current build:
+
+```bash
+python3 beeper-changes.py --from 4.3.144 --to 4.3.183
+python3 beeper-changes.py --channel nightly
+update-beeper --compare 4.3.144 4.3.183
+```
+
+The output groups published notes by release and links each source page. Beeper does not publish itemized notes for every build, especially nightlies; the checker explicitly identifies a target build with no notes and the latest build covered by published notes. The October 5 desktop entry currently has a `v5.3.176` page title while its excerpt and the actual stable build say `v4.3.176`; the checker uses the excerpt and calls out the mismatch. This is a changelog comparison, not a binary diff or a complete list of every code change.
 
 ## Desktop and release notes
 
 On Wayland, the updater creates `~/.local/share/applications/beeper-wayland.desktop`, installs an icon, applies native Wayland flags, and removes stale duplicate shortcuts. It uses an existing `~/bin/beeper-wayland` wrapper if present. `update-beeper --check-desktop` checks the shortcut without installing an update. Beeper restarts outside the updater's one-shot service so it remains running after the service exits.
 
-`--changelog` uses a six-hour local cache of the [beeper-intel](https://github.com/robertogogoni/beeper-intel) feed when `jq` is available. `--whats-new` compares the installed version with the selected channel and shows any covered notes. That feed can lag behind Beeper's download API; the terminal identifies the latest version it covers and points to [Beeper's desktop changelog](https://www.beeper.com/changelog/desktop) for newer notes. If in-terminal data is unavailable, `--changelog` opens a browser when possible.
+`--whats-new` uses the official checker when Python 3 is available. `--changelog` still uses a six-hour local cache of the [beeper-intel](https://github.com/robertogogoni/beeper-intel) feed when `jq` is available. That older feed can lag behind Beeper's download API; use `--whats-new` or `--compare` for current official notes. If in-terminal data is unavailable, `--changelog` opens [Beeper's desktop changelog](https://www.beeper.com/changelog/desktop) in a browser when possible.
 
 The older patch that suppressed Beeper's internal update prompt cannot currently be applied because its JavaScript is packed in `app.asar`. The updater reports that patch as skipped; it does not repack Beeper's application code.
 
@@ -166,6 +184,7 @@ The older patch that suppressed Beeper's internal update prompt cannot currently
 | Path | Use |
 | --- | --- |
 | `~/.local/bin/update-beeper` | Installed updater. |
+| `~/.local/bin/beeper-changes.py` | Official build-to-build changelog checker. |
 | `/opt/beeper/` | Current Beeper installation. |
 | `/opt/beeper/.update-beeper-branch` | Installed channel marker. |
 | `/opt/beeper-backups/` | Up to three recent installations for rollback. |
@@ -178,7 +197,7 @@ The older patch that suppressed Beeper's internal update prompt cannot currently
 | `~/.local/share/icons/hicolor/512x512/apps/beepertexts.png` | Launcher icon. |
 | `~/.config/BeeperTexts/` | Beeper user data and Electron caches. |
 
-The updater requires Bash, x86_64 Linux, `curl`, `sudo`, and standard system utilities. Current AppImages also require `asar` for metadata extraction. Arch Linux or another pacman-based distribution is the supported package-management path; `yay` is needed only for a current AUR package. `fzf`, `dialog`, `whiptail`, `jq`, `notify-send`, and systemd user services add optional menu, notes, notification, and scheduling features. The direct-download path can run without pacman, but that configuration has less coverage.
+The updater requires Bash, x86_64 Linux, `curl`, `sudo`, and standard system utilities. Current AppImages also require `asar` for metadata extraction. Arch Linux or another pacman-based distribution is the supported package-management path; `yay` is needed only for a current AUR package. Python 3 is required for `--compare` and the official `--whats-new` checker. `fzf`, `dialog`, `whiptail`, `jq`, `notify-send`, and systemd user services add optional menu, older cached notes, notification, and scheduling features. The direct-download path can run without pacman, but that configuration has less coverage.
 
 ## Troubleshooting
 

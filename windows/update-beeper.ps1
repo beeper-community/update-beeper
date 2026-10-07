@@ -12,6 +12,9 @@ param(
     [string]$Channel = 'stable',
     [ValidateSet('auto', 'x64', 'arm64')]
     [string]$Architecture = 'auto',
+    [switch]$Changes,
+    [string]$FromVersion,
+    [string]$ToVersion,
     [switch]$Install,
     [switch]$DownloadOnly,
     [switch]$Force
@@ -94,19 +97,47 @@ function Test-BeeperInstaller([string]$Path, $Release) {
 
 if ($Force -and -not $Install) { throw '-Force requires -Install.' }
 if ($Install -and $DownloadOnly) { throw 'Choose either -Install or -DownloadOnly.' }
+if ($Changes -and ($Install -or $DownloadOnly)) { throw '-Changes cannot be combined with an installer action.' }
+if (($FromVersion -or $ToVersion) -and -not $Changes) { throw '-FromVersion and -ToVersion require -Changes.' }
 
 $cpu = Get-BeeperArchitecture
 $installed = Get-InstalledBeeper
-$stable = Get-BeeperRelease 'stable' $cpu
-$nightly = Get-BeeperRelease 'nightly' $cpu
-$target = if ($Channel -eq 'nightly') { $nightly } else { $stable }
+$stable = $null
+$nightly = $null
+$target = $null
+if (-not ($Changes -and $ToVersion)) {
+    $stable = Get-BeeperRelease 'stable' $cpu
+    $nightly = Get-BeeperRelease 'nightly' $cpu
+    $target = if ($Channel -eq 'nightly') { $nightly } else { $stable }
+}
 
 Write-Host "Beeper Desktop for Windows ($cpu)"
 Write-Host "Installed: $(if ($installed) { $installed.Version } else { 'not found' })"
-Write-Host "Stable:    $($stable.version)"
-Write-Host "Nightly:   $($nightly.version)"
-Write-Host "Selected:  $Channel $($target.version)"
+if ($target) {
+    Write-Host "Stable:    $($stable.version)"
+    Write-Host "Nightly:   $($nightly.version)"
+    Write-Host "Selected:  $Channel $($target.version)"
+}
 if ($installed) { Write-Host "Location:  $($installed.Path)" }
+
+if ($Changes) {
+    $checker = Join-Path $PSScriptRoot 'beeper-changes.py'
+    if (-not (Test-Path -LiteralPath $checker -PathType Leaf)) {
+        $checker = Join-Path (Split-Path $PSScriptRoot -Parent) 'beeper-changes.py'
+    }
+    if (-not (Test-Path -LiteralPath $checker -PathType Leaf)) {
+        throw 'beeper-changes.py is missing. Keep it beside this script or in the parent repository folder.'
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) { throw 'Python 3 is required for -Changes.' }
+    $start = if ($FromVersion) { $FromVersion } elseif ($installed) { $installed.Version } else {
+        throw 'Beeper is not installed; pass -FromVersion for a comparison.'
+    }
+    $end = if ($ToVersion) { $ToVersion } else { [string]$target.version }
+    & $python.Source $checker --from $start --to $end --channel $Channel
+    if ($LASTEXITCODE -ne 0) { throw "Changelog comparison failed (exit $LASTEXITCODE)." }
+    return
+}
 
 if (-not $Install -and -not $DownloadOnly) { return }
 if ($Install -and $installed -and $installed.Version -eq [string]$target.version -and -not $Force) {
